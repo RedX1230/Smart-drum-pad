@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+
+# Environment/secrets
+.env
+.env.*
+
+# Generated files
+outputs/
+*.wav
+*.mp3
+*.flac
+
+# OS
+.DS_Store
+Thumbs.db

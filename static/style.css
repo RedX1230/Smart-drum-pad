@@ -1,0 +1,74 @@
+/* Dark‑mode, glass‑morphism UI */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+:root {
+    --bg: #0a0a0a;
+    --card-bg: rgba(255, 255, 255, 0.08);
+    --primary: #4fd1c5;
+    --text: #e0e0e0;
+    --radius: 12px;
+    --shadow: rgba(0,0,0,0.5);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+}
+
+h1 {
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin: 1rem 0;
+    max-width: 800px;
+    width: 100%;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px var(--shadow);
+    transition: transform 0.2s;
+}
+.card:hover { transform: translateY(-4px); }
+
+input[type="text"] {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    color: var(--text);
+    width: 100%;
+    max-width: 260px;
+    margin-right: 0.5rem;
+}
+
+button {
+    background: var(--primary);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+button:hover { background: #3fb9ae; }
+
+#score { margin-top: 0.5rem; font-weight: 600; color: var(--primary); }
+
+canvas { background: #111; border-radius: var(--radius); }

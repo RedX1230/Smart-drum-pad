@@ -1,0 +1,167 @@
+import sys
+import os
+import time
+import argparse
+
+# Ensure project root is on sys.path for direct script execution
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import cv2
+import requests
+from src.accent_detection import augment_strike
+from src.game_dashboard import GameDashboard
+
+from src.camera_overhead import OverheadCamera
+from src.detect_sticks import load_calibration, detect_stick_tips
+from src.kalman_tracker import StickTrackerManager
+from src.calibrate_pad import run_pad_calibration
+from src.zone_simulation import run_zone_simulation
+from src.detect_strikes import AudioStrikeDetector
+from src.zone_highlighter import ZoneHighlighter
+from src.metrics_collector import MetricsCollector
+from src.web_dashboard import start_web_server
+
+# Global metrics collector instance
+collector = MetricsCollector()
+# Start Flask server in background daemon thread
+start_web_server(collector)
+
+
+def ask_yes_no(prompt, default='y'):
+    ans = input(f"{prompt} [{'Y/n' if default=='y' else 'y/N'}]: ").strip().lower()
+    if ans == '':
+        ans = default
+    return ans in ('y', 'yes')
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Smart Drum Pad main runner")
+    parser.add_argument("--no-calib", action="store_true", help="Skip interactive pad calibration")
+    parser.add_argument("--debug", action="store_true", help="Show color mask debug windows")
+    parser.add_argument("--cam", type=int, default=None, help="Camera index override")
+    args = parser.parse_args()
+
+    print("Smart Drum Pad — Main")
+
+    # Optionally run interactive pad calibration
+    if not args.no_calib:
+        if ask_yes_no("Run pad calibration now?", default='y'):
+            run_pad_calibration()
+
+    # Load calibration (center, radius, rim)
+    cx, cy, R, rim_width = load_calibration()
+
+    debug = args.debug or ask_yes_no("Show color mask debug windows?", default='n')
+
+    show_zones = ask_yes_no("Show zone simulation?", default='n')
+
+    if show_zones:
+        run_zone_simulation(cam_idx=args.cam, show_mask=debug)
+        return
+
+    cam = OverheadCamera()
+    if args.cam is not None:
+        cam.camera_idx = args.cam
+    if not cam.start():
+        print("Failed to start camera. Exiting.")
+        return
+
+    tracker_manager = StickTrackerManager(cx, cy)
+    strike_detector = AudioStrikeDetector(sample_rate=44100, threshold_db=-20.0, cooldown_ms=120)
+    zone_highlighter = ZoneHighlighter(cx, cy, R, rim_width)
+
+    # Initialize the game dashboard (scrolling note lane)
+    dashboard = GameDashboard(chart_path="charts/demo.json")
+
+    trail_l = []
+    trail_r = []
+
+    print("Press 'q' to quit, 'd' to toggle debug masks.")
+    print("[AUDIO] Listening for drum strikes on microphone...")
+    show_debug = debug
+
+    try:
+        while True:
+            frame, ts = cam.read()
+            if frame is None:
+                time.sleep(0.01)
+                continue
+
+            tips = detect_stick_tips(frame, cx, cy, R, debug=show_debug)
+            tracks = tracker_manager.update(tips)
+            # Push metrics for this frame
+            left_pos = tracks.get('L')[:2] if 'L' in tracks else None
+            right_pos = tracks.get('R')[:2] if 'R' in tracks else None
+            collector.push_frame(ts, left_pos, right_pos)
+            
+            # Detect strikes using audio and tracking
+            strikes = strike_detector.update(tracks, ts)
+            for strike in strikes:
+                zone_name = zone_highlighter.get_zone_name(int(strike['x']), int(strike['y']))
+                augment_strike(strike, zone_name)
+                # Forward strike to web UI via Flask endpoint
+                try:
+                    requests.post('http://127.0.0.1:5000/post_strike', json=strike, timeout=0.1)
+                except Exception:
+                    # If the Flask server isn't running, ignore silently
+                    pass
+                collector.add_strike(strike)
+            # Update the scrolling dashboard (adds notes, scores, etc.)
+            frame = dashboard.update(frame, ts, strikes)
+
+            # Draw pad guides
+            cv2.circle(frame, (cx, cy), R, (255, 255, 255), 1)
+            cv2.circle(frame, (cx, cy), R + rim_width, (100, 100, 100), 1)
+            cv2.drawMarker(frame, (cx, cy), (100, 100, 100), cv2.MARKER_CROSS, 8, 1)
+
+            # Draw raw detections
+            for t in tips:
+                if len(t) == 3:
+                    rx, ry, rcol = t
+                    color = (0, 0, 255) if rcol == 'R' else (255, 0, 0)
+                    cv2.circle(frame, (rx, ry), 4, color, -1)
+
+            # Draw Left Tracker (Green)
+            if 'L' in tracks:
+                lx, ly, lvx, lvy = tracks['L']
+                cv2.circle(frame, (int(lx), int(ly)), 8, (0, 255, 0), 2)
+                cv2.putText(frame, "L", (int(lx) - 15, int(ly) - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                trail_l.append((int(lx), int(ly)))
+                if len(trail_l) > 15:
+                    trail_l.pop(0)
+
+            # Draw Right Tracker (Red)
+            if 'R' in tracks:
+                rx, ry, rvx, rvy = tracks['R']
+                cv2.circle(frame, (int(rx), int(ry)), 8, (0, 0, 255), 2)
+                cv2.putText(frame, "R", (int(rx) + 10, int(ry) - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                trail_r.append((int(rx), int(ry)))
+                if len(trail_r) > 15:
+                    trail_r.pop(0)
+
+            # Draw trails
+            for i in range(1, len(trail_l)):
+                cv2.line(frame, trail_l[i - 1], trail_l[i], (0, 255, 0), 1)
+            for i in range(1, len(trail_r)):
+                cv2.line(frame, trail_r[i - 1], trail_r[i], (0, 0, 255), 1)
+
+            # Draw detected strikes
+
+            cv2.imshow("Smart Drum Pad - Tracking", frame)
+
+            key = cv2.waitKey(10) & 0xFF
+            if key == ord('q'):
+                break
+            if key == ord('d'):
+                show_debug = not show_debug
+
+    finally:
+        # Finalize dashboard (persist scores)
+        dashboard.finalize()
+        strike_detector.stop()
+        cam.stop()
+        cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    main()

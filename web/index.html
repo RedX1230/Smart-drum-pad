@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Drum Pad – Rhythm Game</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="menu" class="overlay">
+        <h1><img src="assets/logo.png" alt="Logo" style="height:48px; vertical-align:middle; margin-right:10px;">Smart Drum Pad – Rhythm Game</h1>
+        <div class="form-group">
+            <label for="chartSelect">Select Chart:</label>
+            <select id="chartSelect"></select>
+        </div>
+        <div class="form-group">
+            <label for="difficultySelect">Difficulty:</label>
+            <select id="difficultySelect">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+            </select>
+        </div>
+        <button id="startBtn">Start Game</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="scorePanel" class="panel">
+        <h2>Score</h2>
+        <p>Score: <span id="scoreValue">0</span></p>
+        <p>Combo: <span id="comboValue">0</span></p>
+        <p>Perfect: <span id="perfectCount">0</span></p>
+        <p>Good: <span id="goodCount">0</span></p>
+        <p>Okay: <span id="okayCount">0</span></p>
+        <p>Bad: <span id="badCount">0</span></p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

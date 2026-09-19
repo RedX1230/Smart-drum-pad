@@ -1,0 +1,18 @@
+audio:
+  device_index: null
+  latency_ms: 0.0
+  sample_rate: 44100
+  threshold: 0.05
+calibration:
+  center_x: 361
+  center_y: 242
+  radius: 206
+  rim_width: 9
+camera:
+  height: 480
+  index: 1
+  width: 640
+zones:
+  inner: 0.2
+  middle: 0.5
+  outer: 0.8

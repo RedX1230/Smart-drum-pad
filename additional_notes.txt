@@ -1,0 +1,98 @@
+SMART DRUM PAD - PROJECT ARCHITECTURE & FEATURE SPECIFICATION
+
+This file outlines the comprehensive list of features, modules, and hardware setups planned for the Smart Drum Pad application.
+
+================================================================================
+1. HARDWARE & PHYSICAL SETUP
+================================================================================
+* Camera View:
+  - Single Top-View Camera (Overhead view).
+  - Positioned directly above the pad looking down to capture X-Y coordinate hits.
+* Drum Pad:
+  - White surface/skin with a black rim.
+  - White skin provides high visual contrast for stick tracking.
+* Sticks:
+  - Both drumsticks will have black tips.
+  - Tips will be tracked as dark contours on the bright white pad.
+* Audio:
+  - Standard microphone capture (no metronome audio output needed).
+  - Used for microsecond-accurate strike transient detection.
+
+================================================================================
+2. CORE PIPELINE MODULES (TO BE IMPLEMENTED)
+================================================================================
+
+* [calibrate_pad.py]
+  - Auto-detect the white circular pad boundary and black rim using contour detection.
+  - segment the pad into concentric zones (e.g., Center, Middle, Outer Edge).
+  - Save the pad center and radius configuration to config.yaml.
+
+* [audio_capture.py]
+  - Capture real-time audio from the microphone using the `sounddevice` library.
+  - Apply thresholding and amplitude onset envelope analysis to detect the exact millisecond of a drum strike (transient detection).
+
+* [detect_sticks.py]
+  - Track black stick tips using inverse thresholding against the white pad.
+  - Handle stick shaft/body tracking when the tips cross over the black rim or move off the pad.
+  - Separate and track Left vs. Right hand sticks based on their initial entry sides (Left vs. Right halves of the frame).
+
+* [kalman_tracker.py]
+  - Implement a Kalman filter tracker (using `filterpy`) for each stick.
+  - Predict coordinates and velocity vector updates between frames.
+  - Smooth out tracking jitter, noise, and compensate for motion blur during fast strokes.
+
+* [detect_strikes.py]
+  - Fusion of audio timestamps with camera coordinates.
+  - When an audio strike transient is detected:
+    - Match it to the visual stick state at that timestamp.
+    - Identify which stick struck the pad based on lowest Y-coordinate, downward velocity, or maximum deceleration.
+    - Retrieve the 2D coordinate (x, y) of the strike.
+
+* [accent_detection.py]
+  - Classify hits as Accent (loud), Normal, or Ghost Notes (soft).
+  - Combine the peak amplitude of the audio transient with the visual approach velocity of the striking stick.
+
+* [rudiment_classifier.py]
+  - Parse sequences of alternating left and right strikes (e.g., L, R, L, L, R, L, R, R).
+  - Classify standard drum rudiments in real-time:
+    - Single Stroke Roll (R-L-R-L)
+    - Double Stroke Roll (R-R-L-L)
+    - Single Paradiddle (R-L-R-R / L-R-L-L)
+    - Flams and Drags
+  - Support Dynamic Time Warping (DTW) to match patterns despite timing errors.
+
+* [session_recorder.py]
+  - Write time-series data of each strike during a session to a file (JSON or CSV).
+  - Saved fields per hit: Timestamp, Hand (L/R), Coordinates (X, Y), Zone (Center/Rim), Velocity, Accent Type, and Timing Offset.
+  - Store logs in the `sessions/` directory.
+
+* [metrics.py] & [features.py]
+  - Analyze recording files to calculate:
+    - Timing consistency (micro-timing jitter / standard deviation of intervals).
+    - Left vs. Right hand volume and speed balance.
+    - Hit accuracy (percent of strikes landing in target zones vs. rim).
+
+* [plots_report.py]
+  - Generate visual reports at the end of each session:
+    - Heatmaps of strike coordinates on the circular pad.
+    - Velocity / Accent distribution graphs.
+    - Timing deviation histograms.
+  - Save reports in the `outputs/` folder.
+
+* [main.py]
+  - Orchestrate all components.
+  - Manage application states (Calibration Mode, Live Practice Mode, Reporting Mode).
+  - Provide a live feedback window showing the camera tracking overlay and real-time statistics.
+
+================================================================================
+3. ADVANCED / IMPRESSIVE FEATURES
+================================================================================
+* Audio-Visual Latency Auto-Calibration:
+  - Measure and store the USB camera/system delay compared to audio (e.g. 30–80ms lag).
+  - Let the user tap the pad a few times to auto-detect and write the offset to config.yaml.
+* Accent & Ghost Note Dynamics Meter:
+  - Real-time gauge comparing dynamic contrast (accent ratio) for technique training.
+* Heatmap & PDF Reports:
+  - Auto-generate performance summary PDFs with visual heatmaps to track practice progress over time.
+* Gamified Target Play-Along:
+  - Play-along mode where user reads target sequences from config.yaml and is scored (Perfect, Good, Late, Early, Miss).

@@ -1,0 +1,8 @@
+[
+  {"time": 2.0, "zone": "center", "hand": "L"},
+  {"time": 3.0, "zone": "rim",    "hand": "R"},
+  {"time": 4.5, "zone": "inner",  "hand": "L"},
+  {"time": 6.0, "zone": "outer",  "hand": "R"},
+  {"time": 7.5, "zone": "center", "hand": "L"},
+  {"time": 9.0, "zone": "rim",    "hand": "R"}
+]
