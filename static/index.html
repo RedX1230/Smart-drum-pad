@@ -1,150 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Smart Drum Pad Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/static/style.css" />
-    <style>
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            width: 100%;
-            max-width: 1000px;
-        }
-        .stat-box {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            margin-bottom: 1rem;
-        }
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 600;
-            color: var(--primary);
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Drum Pad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=Work+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
-    <h1>Smart Drum Pad Dashboard</h1>
-    
-    <div class="card" style="max-width: 1000px;">
-        <div class="stat-box">
-            <h2>Total Strikes</h2>
-            <div class="stat-value" id="totalStrikes">0</div>
+<body data-view="play">
+
+  <header class="masthead">
+    <div class="wordmark">Smart Drum Pad<span class="dot">.</span></div>
+    <nav class="tabs" id="viewnav">
+      <button data-goto="play" class="on">Practice</button>
+      <button data-goto="analysis">Review</button>
+      <button data-goto="calibrate">Setup</button>
+    </nav>
+    <div class="status" id="link"><span class="link-dot"></span><span class="link-text">listening</span></div>
+  </header>
+
+  <!-- ============================ PRACTICE ============================ -->
+  <main class="view-play stage">
+
+    <aside class="desk">
+      <span class="eyebrow">Set up the phrase</span>
+
+      <div class="desk-group">
+        <div class="field-label">Sticking</div>
+        <div class="seq" id="seqStrip" aria-live="polite"></div>
+        <div class="handpad">
+          <button data-append="L" class="stk stk-l">L</button>
+          <button data-append="R" class="stk stk-r">R</button>
+          <button data-seq="back" class="stk-min" title="delete">⌫</button>
+          <button data-seq="clear" class="stk-min">clear</button>
         </div>
-        <div class="grid">
-            <div>
-                <h3>Speed & Acceleration</h3>
-                <canvas id="metricsChart"></canvas>
+        <ul class="presets">
+          <li><button data-preset="LR">Single stroke</button></li>
+          <li><button data-preset="LLRR">Double stroke</button></li>
+          <li><button data-preset="LRRL">Paradiddle</button></li>
+          <li><button data-preset="LLRLLR">Triplet feel</button></li>
+        </ul>
+      </div>
+
+      <div class="desk-group">
+        <div class="field-label">Tempo</div>
+        <div class="tempo">
+          <button data-bpm="-5" aria-label="slower">–</button>
+          <span class="tempo-n"><b id="bpmVal">90</b><i>bpm</i></span>
+          <button data-bpm="5" aria-label="faster">+</button>
+        </div>
+        <label class="loop"><input type="checkbox" id="loopChk" checked /> repeat the phrase</label>
+      </div>
+
+      <button class="begin" id="transport">Begin practice</button>
+    </aside>
+
+    <section class="play-main">
+      <header class="now">
+        <div class="now-target">
+          <span class="eyebrow">Now practising</span>
+          <div class="now-seq" id="nowSeq"></div>
+          <div class="now-meta" id="nowMeta"></div>
+        </div>
+        <div class="now-metrics">
+          <div class="metric metric-lead">
+            <b id="roAcc">—</b><span class="eyebrow">Accuracy</span>
+          </div>
+          <div class="metric"><b id="roCombo">0</b><span class="eyebrow">Streak</span></div>
+          <div class="metric"><b id="roScore">0</b><span class="eyebrow">Score</span></div>
+          <div class="metric"><b id="roBpm">—</b><span class="eyebrow">Struck</span></div>
+        </div>
+      </header>
+
+      <div class="lane-hold">
+        <canvas id="lane"></canvas>
+        <div class="verdict" id="verdict"></div>
+      </div>
+
+      <div class="drum-hold">
+        <canvas id="drum"></canvas>
+        <p class="reading"><span id="hudHand"></span><span id="hudType">ready when you are</span><i id="hudZone"></i></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================= REVIEW ============================= -->
+  <section class="view-analysis review" hidden>
+    <div class="review-inner">
+      <header class="rev-head">
+        <div>
+          <span class="eyebrow">Session review</span>
+          <h1 class="rev-title" id="revTitle">The session</h1>
+        </div>
+        <p class="rev-summary" id="revSummary"></p>
+      </header>
+
+      <p id="anaEmpty" class="rev-empty">Play a phrase and this page fills with how it went — the hand you used, whether you sat ahead of or behind the beat, where the stick landed, and where the sequence slipped.</p>
+
+      <div id="anaBody" hidden>
+        <section class="rev-key" id="revKey"></section>
+
+        <section class="rev-block">
+          <div class="rev-block-head">
+            <span class="eyebrow">Timing</span>
+            <h2>Ahead of, or behind, the beat</h2>
+            <p class="rev-note" id="timingNote"></p>
+          </div>
+          <div class="timing-wrap"><canvas id="anaTiming"></canvas></div>
+          <div class="timing-axis"><span>rushing</span><i>on the beat</i><span>dragging</span></div>
+        </section>
+
+        <div class="rev-two">
+          <section class="rev-block">
+            <div class="rev-block-head">
+              <span class="eyebrow">Pattern</span>
+              <h2>What you played</h2>
             </div>
-            <div>
-                <h3>Zone Hits</h3>
-                <canvas id="zonesChart"></canvas>
+            <div class="seqcompare" id="anaSeq"></div>
+            <ul class="mistakes" id="anaMistakes"></ul>
+          </section>
+
+          <section class="rev-block">
+            <div class="rev-block-head">
+              <span class="eyebrow">Drum map</span>
+              <h2>Where the stick landed</h2>
             </div>
+            <div class="drummap">
+              <canvas id="anaDrum"></canvas>
+              <div class="drummap-key">
+                <span class="k k-l">left</span>
+                <span class="k k-r">right</span>
+              </div>
+            </div>
+          </section>
         </div>
-    </div>
 
-    <div class="card" style="max-width: 1000px;">
-        <h2>Pattern Evaluation</h2>
-        <p style="margin-bottom: 1rem; color: var(--text-muted);">Enter a sequence like LRLR or LLRR to practice your rudiments.</p>
-        <div style="display: flex; align-items: center;">
-            <input type="text" id="patternInput" placeholder="Enter pattern, e.g. lrlrlr" />
-            <button onclick="setPattern()">Set Pattern</button>
+        <div class="rev-two">
+          <section class="rev-block">
+            <div class="rev-block-head">
+              <span class="eyebrow">Strike character</span>
+              <h2>How you struck</h2>
+            </div>
+            <div class="typebars" id="anaTypes"></div>
+          </section>
+
+          <section class="rev-block">
+            <div class="rev-block-head">
+              <span class="eyebrow">Detailed metrics</span>
+              <h2>By the numbers</h2>
+            </div>
+            <dl class="metrics-table" id="anaTable"></dl>
+          </section>
         </div>
-        <div id="score" style="font-size: 1.5rem; margin-top: 1rem;">Score: 0.00</div>
+      </div>
     </div>
+  </section>
 
-    <script>
-        // Main metrics chart (Speed & Accel)
-        const ctxMetrics = document.getElementById('metricsChart').getContext('2d');
-        const metricsChart = new Chart(ctxMetrics, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'Speed', data: [], borderColor: '#4fd1c5', fill: false, tension: 0.3 },
-                    { label: 'Accel', data: [], borderColor: '#f56565', fill: false, tension: 0.3 }
-                ]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
-        });
+  <!-- ============================= SETUP ============================= -->
+  <section class="view-calibrate review" hidden>
+    <div class="review-inner">
+      <header class="rev-head">
+        <div>
+          <span class="eyebrow">Setup</span>
+          <h1 class="rev-title">Tuning the pad</h1>
+        </div>
+        <p class="rev-summary">A live look at what the camera and microphone pick up.</p>
+      </header>
 
-        // Zone hits bar chart
-        const ctxZones = document.getElementById('zonesChart').getContext('2d');
-        const zonesChart = new Chart(ctxZones, {
-            type: 'bar',
-            data: {
-                labels: ['Center', 'Rim', 'Edge', 'Unknown'],
-                datasets: [{
-                    label: 'Hits',
-                    data: [0, 0, 0, 0],
-                    backgroundColor: ['#4fd1c5', '#f6e05e', '#fc8181', '#a0aec0']
-                }]
-            },
-            options: { responsive: true, scales: { y: { beginAtZero: true } } }
-        });
+      <div class="cal-grid">
+        <div class="cal-preview">
+          <canvas id="calDrum"></canvas>
+          <div class="cal-tips">
+            <span class="tip tip-l">left <b id="calL">no track</b></span>
+            <span class="tip tip-r">right <b id="calR">no track</b></span>
+          </div>
+        </div>
+        <div class="cal-params" id="calParams"></div>
+      </div>
+      <p class="cal-note">Detection settings live in <code>config.yaml</code>. Run <code>python -m src.calibrate_pad</code> to redraw the pad boundary, or <code>python -m src.calibrate_height</code> for the side camera. Zone spacing and the audio threshold shown here are read live.</p>
+    </div>
+  </section>
 
-        async function fetchMetrics() {
-            try {
-                const res = await fetch('/metrics');
-                const data = await res.json();
-                
-                const speed = data.speed || 0;
-                const accel = data.acceleration || 0;
-                const strikes = data.total_strikes || 0;
-                const zones = data.zone_hits || {};
-
-                document.getElementById('totalStrikes').innerText = strikes;
-
-                const now = new Date().toLocaleTimeString();
-                metricsChart.data.labels.push(now);
-                metricsChart.data.datasets[0].data.push(speed);
-                metricsChart.data.datasets[1].data.push(accel);
-                
-                if (metricsChart.data.labels.length > 30) { 
-                    metricsChart.data.labels.shift(); 
-                    metricsChart.data.datasets[0].data.shift(); 
-                    metricsChart.data.datasets[1].data.shift(); 
-                }
-                metricsChart.update();
-
-                // Update zones chart
-                zonesChart.data.datasets[0].data = [
-                    zones['Center'] || 0,
-                    zones['Rim'] || 0,
-                    zones['Edge'] || 0,
-                    zones['Unknown'] || 0
-                ];
-                zonesChart.update();
-
-            } catch (err) {
-                console.error("Failed to fetch metrics", err);
-            }
-        }
-
-        async function setPattern() {
-            const pat = document.getElementById('patternInput').value;
-            await fetch('/set_pattern', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pattern: pat })
-            });
-        }
-
-        async function fetchScore() {
-            try {
-                const res = await fetch('/score');
-                const data = await res.json();
-                document.getElementById('score').textContent = 'Score: ' + data.score.toFixed(2);
-            } catch (err) {}
-        }
-
-        setInterval(() => { fetchMetrics(); fetchScore(); }, 1000);
-    </script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
