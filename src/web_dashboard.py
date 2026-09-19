@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from threading import Thread
 import os
 import logging
+import yaml
 
 # Silence Flask/Werkzeug logs so they don't hide the interactive terminal prompts
 log = logging.getLogger('werkzeug')
@@ -72,6 +73,18 @@ def score():
     if pattern_evaluator is None:
         return jsonify({"score": 0.0})
     return jsonify({"score": pattern_evaluator.evaluate()})
+
+@app.route('/config')
+def config():
+    """Return the pad calibration, zone and device settings so the UI can
+    place strikes on an accurate drum representation. Read‑only."""
+    cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config.yaml'))
+    try:
+        with open(cfg_path, 'r') as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        data = {}
+    return jsonify(data)
 
 # ---------------------------------------------------------------------
 # Server launch helper
