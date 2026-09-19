@@ -107,8 +107,28 @@ $('#viewnav').addEventListener('click', (e) => { const b = e.target.closest('but
 /* ---- pattern builder + tempo ----------------------------------------- */
 let pattern = ['L', 'R', 'L', 'R'];
 let bpm = 90;
+const PRESETS = { LR: 'Single stroke', LLRR: 'Double stroke', LRRL: 'Paradiddle', LLRLLR: 'Triplet feel' };
+function minUnit(arr) {
+  const n = arr.length;
+  for (let len = 1; len <= n; len++) {
+    if (n % len) continue;
+    if (arr.every((v, i) => v === arr[i % len])) return arr.slice(0, len).join('');
+  }
+  return arr.join('');
+}
+function patternName() {
+  if (!pattern.length) return 'No phrase set';
+  return PRESETS[minUnit(pattern)] || 'Custom phrase';
+}
 function drawSeq() {
   $('#seqStrip').innerHTML = pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('');
+  renderNow();
+}
+function renderNow() {
+  $('#nowSeq').innerHTML = pattern.length
+    ? pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('')
+    : '<span class="now-meta">—</span>';
+  $('#nowMeta').textContent = `${patternName()} · ${bpm} bpm`;
 }
 $('.handpad').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -124,7 +144,7 @@ $('.presets').addEventListener('click', (e) => {
 $('.tempo').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   bpm = Math.max(30, Math.min(240, bpm + parseInt(b.dataset.bpm, 10)));
-  $('#bpmVal').textContent = bpm;
+  $('#bpmVal').textContent = bpm; renderNow();
 });
 
 /* ---- session model ---------------------------------------------------- */
@@ -161,12 +181,13 @@ async function startSession() {
     score: 0, combo: 0, maxCombo: 0, counters: { perfect: 0, good: 0, okay: 0, bad: 0 }, events: [],
   });
   extendNotes(0);
-  const t = $('#transport'); t.textContent = 'Stop session'; t.classList.add('live');
+  const t = $('#transport'); t.textContent = 'Stop practice'; t.classList.add('live');
   updateReadouts();
 }
 function stopSession() {
   session.running = false;
-  const t = $('#transport'); t.textContent = 'Start session'; t.classList.remove('live');
+  session.durationMs = performance.now() - session.start;
+  const t = $('#transport'); t.textContent = 'Begin practice'; t.classList.remove('live');
   if (session.events.length) setView('analysis');
 }
 $('#transport').addEventListener('click', () => (session.running ? stopSession() : startSession()));
@@ -439,69 +460,127 @@ function renderCalParams() {
     <div class="pgroup"><h4>Audio detection</h4>${row('device', a.device_index ?? 'default')}${row('sample rate', (a.sample_rate ?? '—') + ' Hz')}${row('threshold', a.threshold ?? '—')}${row('latency', (a.latency_ms ?? 0) + ' ms')}</div>`;
 }
 
-/* ---- render: analysis ------------------------------------------------- */
+/* ---- render: review --------------------------------------------------- */
+function mmss(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 async function renderAnalysis() {
   const ev = session.events;
-  $('#anaEmpty').style.display = ev.length ? 'none' : 'block';
-  $('#anaCards').style.display = ev.length ? 'grid' : 'none';
-  if (!ev.length) return;
+  const has = ev.length > 0;
+  $('#anaEmpty').hidden = has;
+  $('#anaBody').hidden = !has;
+  $('#revTitle').textContent = has ? patternName() : 'The session';
+  if (!has) { $('#revSummary').textContent = ''; return; }
 
-  // presented notes in order (judged or missed)
-  const notes = session.notes.filter((n) => n.judged || n.missed).sort((a, b) => a.idx - b.idx).slice(0, 48);
-  // target vs actual
+  const notes = session.notes.filter((n) => n.judged || n.missed).sort((a, b) => a.idx - b.idx);
+  const hits = ev.filter((e) => e.kind === 'hit');
+  const c = session.counters, clean = c.perfect + c.good + c.okay, total = clean + c.bad;
+  const acc = total ? Math.round((clean / total) * 100) : 0;
+  const wrong = hits.filter((e) => !e.correct).length;
+  const missCount = ev.filter((e) => e.kind === 'miss').length;
+  const extraCount = ev.filter((e) => e.kind === 'extra').length;
+  const Lc = ev.filter((e) => e.actual === 'L').length, Rc = ev.filter((e) => e.actual === 'R').length;
+
+  // timing statistics (ms)
+  const deltas = hits.map((e) => e.delta * 1000);
+  const mean = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
+  const spread = deltas.length ? Math.round(Math.sqrt(deltas.reduce((a, d) => a + (d - mean) ** 2, 0) / deltas.length)) : 0;
+  const meanR = Math.round(mean);
+  const tend = meanR > 8 ? 'dragging' : meanR < -8 ? 'rushing' : 'on the beat';
+  const signed = `${meanR > 0 ? '+' : ''}${meanR}`;
+
+  let sc = 0; try { sc = (await (await fetch('/score')).json()).score || 0; } catch (_) {}
+
+  // summary line
+  $('#revSummary').textContent = `${bpm} bpm · ${ev.length} strikes · ${mmss(session.durationMs || 0)}`;
+
+  // KEY PERFORMANCE band
+  const kpi = (label, value, sub, warn) =>
+    `<div class="kpi"><span class="eyebrow">${label}</span><div class="kpi-n${warn ? ' warn' : ''}">${value}</div><div class="kpi-sub">${sub}</div></div>`;
+  $('#revKey').innerHTML =
+    kpi('Accuracy', acc + '%', `${clean} of ${total} clean`, acc < 60) +
+    kpi('Timing', `${signed}<span style="font-size:22px">ms</span>`, tend, Math.abs(meanR) > 25) +
+    kpi('Best streak', session.maxCombo, 'notes in a row') +
+    kpi('Steadiness', `±${spread}<span style="font-size:22px">ms</span>`, 'timing spread', spread > 45);
+
+  // timing note
+  $('#timingNote').textContent = deltas.length
+    ? `On average you played ${tend}${meanR ? `, about ${Math.abs(meanR)} ms ${meanR > 0 ? 'behind' : 'ahead of'} the beat` : ''}, with a spread of ±${spread} ms.`
+    : 'No in-window strikes to measure.';
+
+  // PATTERN — target vs actual
   const trow = notes.map((n) => `<span class="gem ${n.hand}">${n.hand}</span>`).join('');
   const arow = notes.map((n) => {
     if (n.missed) return `<span class="gem miss">·</span>`;
-    const st = n.result.st; const wrong = !n.result.correct ? ' wrong' : '';
-    return `<span class="gem ${st.hand}${wrong}">${st.hand}</span>`;
+    const st = n.result.st;
+    return `<span class="gem ${st.hand}${n.result.correct ? '' : ' wrong'}">${st.hand}</span>`;
   }).join('');
   $('#anaSeq').innerHTML =
-    `<div class="seqrow"><span class="tag">target</span>${trow}</div>` +
-    `<div class="seqrow"><span class="tag">you</span>${arow}</div>`;
+    `<div class="seqrow"><span class="tag">asked</span>${trow}</div>` +
+    `<div class="seqrow"><span class="tag">played</span>${arow}</div>`;
 
-  // hand accuracy
-  const grp = (hand) => { const pn = notes.filter((n) => n.hand === hand); const ok = pn.filter((n) => n.judged && n.result.correct).length; return { tot: pn.length, ok }; };
-  const L = grp('L'), R = grp('R');
-  const bar = (lab, col, ok, tot) => {
-    const p = tot ? Math.round((ok / tot) * 100) : 0;
-    return `<div class="bar"><div class="bar-top"><span>${lab}</span><b>${ok}/${tot} · ${p}%</b></div><div class="track"><div class="fill" style="width:${p}%;background:${col}"></div></div></div>`;
-  };
-  let sc = 0; try { sc = (await (await fetch('/score')).json()).score || 0; } catch (_) {}
-  $('#anaHands').innerHTML = bar('Left hand', LEFT, L.ok, L.tot) + bar('Right hand', RIGHT, R.ok, R.tot) +
-    `<div class="bar"><div class="bar-top"><span>Sequence match</span><b>${Math.round(sc * 100)}%</b></div><div class="track"><div class="fill" style="width:${Math.round(sc * 100)}%;background:rgba(125,95,40,0.7)"></div></div></div>`;
-
-  // hit types
-  const types = {}; ev.forEach((e) => { if (e.type) types[e.type] = (types[e.type] || 0) + 1; });
-  const tmax = Math.max(1, ...Object.values(types));
-  $('#anaTypes').innerHTML = Object.keys(types).length
-    ? Object.entries(types).map(([k, v]) => `<div class="bar"><div class="bar-top"><span>${k}</span><b>${v}</b></div><div class="track"><div class="fill" style="width:${(v / tmax) * 100}%;background:rgba(125,95,40,0.7)"></div></div></div>`).join('')
-    : '<div class="bar"><div class="bar-top"><span>no hit-type data</span></div></div>';
-
-  // mistakes
   const m = [];
   notes.forEach((n) => {
-    if (n.missed) m.push(`Beat ${n.idx + 1} — missed (expected ${n.hand})`);
-    else if (!n.result.correct) m.push(`Beat ${n.idx + 1} — expected ${n.hand}, struck ${n.result.st.hand}`);
+    if (n.missed) m.push(`Beat ${n.idx + 1} — missed (expected ${n.hand === 'L' ? 'left' : 'right'})`);
+    else if (!n.result.correct) m.push(`Beat ${n.idx + 1} — asked ${n.hand === 'L' ? 'left' : 'right'}, played ${n.result.st.hand === 'L' ? 'left' : 'right'}`);
   });
-  ev.filter((e) => e.kind === 'extra').forEach(() => m.push('Stray strike outside the pattern'));
-  $('#anaMistakes').innerHTML = m.length ? m.slice(0, 24).map((x) => `<li>${x}</li>`).join('') : '<li class="clean">Clean run — every note matched hand and timing.</li>';
+  if (extraCount) m.push(`${extraCount} stray strike${extraCount > 1 ? 's' : ''} outside the phrase`);
+  $('#anaMistakes').innerHTML = m.length
+    ? m.slice(0, 12).map((x) => `<li>${x}</li>`).join('')
+    : '<li class="clean">A clean run — every note matched hand and timing.</li>';
+
+  // STRIKE CHARACTER
+  const order = ['ghost', 'normal', 'accent', 'rimshot'];
+  const types = {}; ev.forEach((e) => { if (e.type) types[e.type] = (types[e.type] || 0) + 1; });
+  const keys = Object.keys(types).sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  const tmax = Math.max(1, ...Object.values(types));
+  $('#anaTypes').innerHTML = keys.length
+    ? keys.map((k) => `<div class="bar"><div class="bar-top"><span>${k}</span><b>${types[k]}</b></div><div class="track"><div class="fill" style="width:${(types[k] / tmax) * 100}%;background:var(--brass)"></div></div></div>`).join('')
+    : '<p class="rev-note">No hit-type data was recorded for this session.</p>';
+
+  // DETAILED METRICS
+  const rowT = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+  $('#anaTable').innerHTML =
+    rowT('Perfect', c.perfect) + rowT('Good', c.good) + rowT('Okay', c.okay) +
+    rowT('Missed notes', missCount) + rowT('Wrong hand', wrong) + rowT('Off-pattern strikes', extraCount) +
+    rowT('Left / right strikes', `${Lc} / ${Rc}`) +
+    rowT('Mean timing', `${signed} ms`) + rowT('Timing spread', `±${spread} ms`) +
+    rowT('Sequence match', `${Math.round(sc * 100)}%`);
 
   drawTiming(); drawPlacement();
 }
 function drawTiming() {
   fit(ATIM); const { ctx, w, h } = ATIM; ctx.clearRect(0, 0, w, h);
   const hits = session.events.filter((e) => e.kind === 'hit');
-  const cx = w / 2, scale = w * 0.42 / Math.max(0.12, windows().o);
-  ctx.strokeStyle = 'rgba(44,36,25,0.4)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(cx, 8); ctx.lineTo(cx, h - 8); ctx.stroke();
-  ctx.strokeStyle = 'rgba(44,36,25,0.1)';
-  [-1, 1].forEach((s) => { const x = cx + s * windows().g * scale; ctx.beginPath(); ctx.moveTo(x, 10); ctx.lineTo(x, h - 10); ctx.stroke(); });
+  const cx = w / 2, midY = h / 2, half = w * 0.45, maxD = Math.max(0.12, windows().o), scale = half / maxD;
+
+  // good-timing band around the beat
+  const gw = windows().g * scale;
+  ctx.fillStyle = 'rgba(125,95,40,0.08)'; ctx.fillRect(cx - gw, 6, gw * 2, h - 12);
+  // baseline
+  ctx.strokeStyle = 'rgba(44,36,25,0.2)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - half, midY); ctx.lineTo(cx + half, midY); ctx.stroke();
+  // on-beat line
+  ctx.strokeStyle = 'rgba(44,36,25,0.5)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(cx, 6); ctx.lineTo(cx, h - 6); ctx.stroke();
+
+  // one dot per strike, spread vertically around the line, placed by earliness/lateness
   hits.forEach((e, i) => {
     const x = Math.max(6, Math.min(w - 6, cx + e.delta * scale));
-    const y = 14 + ((i * 37) % (h - 28));
-    ctx.fillStyle = handColor(e.actual); ctx.globalAlpha = e.correct ? 0.9 : 0.35;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    const lane = (i % 6) - 2.5;
+    const y = midY + lane * (h / 15);
+    ctx.fillStyle = handColor(e.actual); ctx.globalAlpha = e.correct ? 0.85 : 0.4;
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
   });
+
+  // mean marker
+  if (hits.length) {
+    const mean = hits.reduce((a, e) => a + e.delta, 0) / hits.length;
+    const mx = Math.max(6, Math.min(w - 6, cx + mean * scale));
+    ctx.strokeStyle = Math.abs(mean) > 0.02 ? 'rgba(124,58,52,0.85)' : 'rgba(95,122,78,0.9)';
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, 2); ctx.lineTo(mx, h - 2); ctx.stroke();
+  }
 }
 function drawPlacement() {
   fit(ADRUM); const { ctx, w, h } = ADRUM; ctx.clearRect(0, 0, w, h);
@@ -527,8 +606,9 @@ function frame() {
 }
 
 /* ---- boot ------------------------------------------------------------- */
-drawSeq();
 $('#bpmVal').textContent = bpm;
+drawSeq();
+renderNow();
 loadConfig();
 layout();
 setInterval(poll, 60);
