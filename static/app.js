@@ -64,6 +64,26 @@ function rr(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
+/* a small baked grain tile — warm dark speckle for paper / drumhead coating */
+const grainTile = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 120;
+  const g = c.getContext('2d'), im = g.createImageData(120, 120);
+  for (let i = 0; i < im.data.length; i += 4) {
+    const n = Math.random();
+    im.data[i] = 60; im.data[i + 1] = 44; im.data[i + 2] = 24;
+    im.data[i + 3] = n < 0.55 ? 0 : Math.floor((n - 0.55) * 90);
+  }
+  g.putImageData(im, 0, 0); return c;
+})();
+const _pat = new WeakMap();
+function grainPattern(ctx) {
+  let p = _pat.get(ctx); if (!p) { p = ctx.createPattern(grainTile, 'repeat'); _pat.set(ctx, p); }
+  return p;
+}
+function grainFill(ctx, x, y, w, h, alpha) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = grainPattern(ctx); ctx.fillRect(x, y, w, h); ctx.restore();
+}
+
 /* ---- app / view state ------------------------------------------------- */
 let view = 'play';
 function setView(v) {
@@ -238,6 +258,21 @@ function drawLane() {
   const hitY = h - 2, travel = 2.4, pps = h / travel;   // strike line at the very foot
   const cxc = w / 2, off = Math.min(w * 0.2, 92);
 
+  // sheet-music surface: a lighter leaf than the page, gently lit, with grain
+  const sheet = ctx.createLinearGradient(0, 0, 0, h);
+  sheet.addColorStop(0, '#f2ecd8'); sheet.addColorStop(1, '#ebe2cb');
+  ctx.fillStyle = sheet; ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  const vig = ctx.createRadialGradient(w / 2, h * 0.4, h * 0.2, w / 2, h * 0.5, h * 0.9);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(90,66,30,0.06)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  grainFill(ctx, 0, 0, w, h, 0.34);
+  // shadow where the masthead paper overlaps the sheet
+  const topSh = ctx.createLinearGradient(0, 0, 0, 14);
+  topSh.addColorStop(0, 'rgba(44,30,14,0.16)'); topSh.addColorStop(1, 'rgba(44,30,14,0)');
+  ctx.fillStyle = topSh; ctx.fillRect(0, 0, w, 14);
+
   // scrolling beat rules — rhythm read through motion, not labels
   ctx.lineWidth = 1;
   for (let k = -1; k < travel + 2; k++) {
@@ -306,14 +341,36 @@ function drawDrum(target, big) {
   rim.addColorStop(0, '#5a4127'); rim.addColorStop(0.7, '#3f2c19'); rim.addColorStop(1, '#291b0e');
   ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+  // walnut grain — restrained concentric growth rings within the rim band
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.arc(cx, cy, R, 0, Math.PI * 2, true); ctx.clip('evenodd');
+  for (let i = 0; i < 7; i++) {
+    const rr2 = R + (rimR - R) * ((i + 0.35) / 7);
+    ctx.strokeStyle = i % 2 ? 'rgba(30,18,6,0.22)' : 'rgba(120,88,48,0.16)';
+    ctx.lineWidth = i % 2 ? 1.4 : 1;
+    ctx.beginPath(); ctx.arc(cx + (big ? 3 : 2), cy + (big ? 2 : 1), rr2, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
   ctx.strokeStyle = 'rgba(20,12,4,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.stroke();
 
   // drumhead — warm coated skin, matte, lit gently from upper-left
   const head = ctx.createRadialGradient(cx - R * 0.28, cy - R * 0.32, R * 0.15, cx, cy, R);
   head.addColorStop(0, '#e7d4ac'); head.addColorStop(0.7, '#d8c199'); head.addColorStop(1, '#c3a97e');
   ctx.fillStyle = head; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // coating texture + faint mottle, clipped to the head
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  blot(ctx, cx + R * 0.34, cy + R * 0.26, R * 0.6, '150,120,74', 0.12);
+  blot(ctx, cx - R * 0.4, cy + R * 0.34, R * 0.5, '120,92,52', 0.1);
+  grainFill(ctx, cx - R, cy - R, R * 2, R * 2, 0.4);
+  // gentle sheen from the upper-left
+  const sheen = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.34, 0, cx - R * 0.3, cy - R * 0.34, R * 0.9);
+  sheen.addColorStop(0, 'rgba(255,248,228,0.22)'); sheen.addColorStop(1, 'rgba(255,248,228,0)');
+  ctx.fillStyle = sheen; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.restore();
   // seam where head meets rim
   ctx.strokeStyle = 'rgba(90,66,32,0.5)'; ctx.lineWidth = big ? 3 : 2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,248,228,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, R - 2, Math.PI * 1.05, Math.PI * 1.75); ctx.stroke();
 
   // restrained concentric practice zones, pencilled
   ctx.strokeStyle = 'rgba(70,52,28,0.16)'; ctx.lineWidth = 1;
@@ -352,6 +409,8 @@ function drawCalPreview() {
   const head = ctx.createRadialGradient(fx(g.center_x) - g.radius * s * 0.3, fy(g.center_y) - g.radius * s * 0.3, g.radius * s * 0.15, fx(g.center_x), fy(g.center_y), g.radius * s);
   head.addColorStop(0, '#e0cca2'); head.addColorStop(1, '#bda070');
   ctx.fillStyle = head; ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * s, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * s, 0, Math.PI * 2); ctx.clip();
+  grainFill(ctx, fx(g.center_x) - g.radius * s, fy(g.center_y) - g.radius * s, g.radius * s * 2, g.radius * s * 2, 0.5); ctx.restore();
   ctx.strokeStyle = 'rgba(90,66,32,0.7)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * s, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = 'rgba(70,52,28,0.28)'; ctx.lineWidth = 1;
@@ -450,6 +509,7 @@ function drawPlacement() {
   const head = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.15, cx, cy, R);
   head.addColorStop(0, '#e7d4ac'); head.addColorStop(1, '#c3a97e');
   ctx.fillStyle = head; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip(); grainFill(ctx, cx - R, cy - R, R * 2, R * 2, 0.5); ctx.restore();
   ctx.strokeStyle = 'rgba(90,66,32,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = 'rgba(70,52,28,0.16)'; ctx.lineWidth = 1;
   [z.inner, z.middle, z.outer].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });

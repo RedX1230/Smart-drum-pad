@@ -19,14 +19,22 @@
 
   --serif: "Fraunces", Georgia, "Times New Roman", serif;
   --sans:  "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* fine printed paper grain, baked as an alpha speckle */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
 
 html, body {
   margin: 0; height: 100%;
-  background:
-    radial-gradient(120% 90% at 50% -10%, #efe6d1 0%, #e7dcc4 55%, #ded0b2 100%);
+  background-color: #e5d9bf;
+  background-image:
+    var(--grain),
+    radial-gradient(135% 95% at 50% -12%, rgba(248,239,216,0.95) 0%, rgba(232,221,197,0.45) 46%, rgba(214,197,164,0.12) 100%),
+    radial-gradient(115% 105% at 50% 48%, transparent 52%, rgba(72,52,26,0.11) 100%);
+  background-size: 140px 140px, cover, cover;
+  background-attachment: fixed, fixed, fixed;
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -42,8 +50,9 @@ h1, h2, h3, dt { font-weight: 500; }
   display: flex; align-items: baseline; gap: 32px;
   padding: 16px 30px 12px;
   border-bottom: 1px solid var(--rule);
+  box-shadow: 0 1px 0 rgba(255,248,231,0.55), 0 8px 16px -14px rgba(44,30,14,0.5);
 }
-.wordmark { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: .2px; color: var(--ink); }
+.wordmark { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: .2px; color: var(--ink); text-shadow: 0 1px 0 rgba(255,248,231,0.5); }
 .wordmark .dot { color: var(--brass); }
 .tabs { display: flex; gap: 22px; margin-left: auto; }
 .tabs button {
@@ -68,29 +77,37 @@ body[data-view="play"] .spread {
 }
 .spread { overflow: hidden; }
 
-/* left margin — controls as practice-book marginalia */
+/* left margin — a warmer, darker leaf of paper laid over the page */
 .margin {
-  border-right: 1px solid var(--rule);
   padding: 26px 24px; overflow: auto;
   display: flex; flex-direction: column; gap: 26px;
+  background-color: #d8c7a4;
+  background-image: var(--grain), linear-gradient(102deg, rgba(206,190,158,0.55), rgba(223,209,180,0.15));
+  background-size: 140px 140px, cover;
+  box-shadow: inset -1px 0 0 rgba(120,95,55,0.28), 10px 0 22px -15px rgba(44,30,14,0.5);
 }
 .m-title { font-family: var(--serif); font-size: 18px; margin: 0 0 12px; color: var(--ink); }
 .m-title::after { content: ""; display: block; width: 26px; height: 2px; background: var(--brass); margin-top: 6px; opacity: .6; }
 
 .seq { display: flex; flex-wrap: wrap; gap: 5px; min-height: 30px; margin-bottom: 12px; }
-.seq .gem { width: 26px; height: 28px; border-radius: 3px; display: grid; place-items: center; font-family: var(--serif); font-weight: 500; font-size: 14px; }
+.seq .gem { width: 26px; height: 28px; border-radius: 3px; display: grid; place-items: center; font-family: var(--serif); font-weight: 500; font-size: 14px; box-shadow: inset 0 1px 0 rgba(255,246,224,0.14), 0 1px 1px rgba(44,30,14,0.22); }
 .seq:empty::after { content: "build a phrase below"; color: var(--ink-faint); font-style: italic; font-family: var(--serif); font-size: 13px; }
-.gem.L { background: var(--walnut); color: var(--paper); }
-.gem.R { background: var(--brass); color: #2a1e08; }
+.gem.L { background: linear-gradient(180deg, #56422d, #402f1f); color: #efe3c8; }
+.gem.R { background: linear-gradient(180deg, #b8944a, #9c7a37); color: #2a1e08; }
 
 .handpad { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
-.stk, .stk-min {
-  border: 1px solid var(--rule); background: var(--paper-2); color: var(--ink);
-  border-radius: 3px; padding: 9px 0; font-size: 14px; font-weight: 500; transition: background .12s;
+.stk, .stk-min, .tempo button {
+  border: 1px solid rgba(75,56,38,0.26); color: var(--ink);
+  background: linear-gradient(180deg, #ecdfc3, #dccdaa);
+  border-radius: 3px; padding: 9px 0; font-size: 14px; font-weight: 500;
+  text-shadow: 0 1px 0 rgba(255,248,231,0.55);
+  box-shadow: inset 0 1px 0 rgba(255,250,236,0.6), 0 1px 2px rgba(44,30,14,0.16);
+  transition: background .12s, box-shadow .1s, transform .06s;
 }
-.stk-l { border-color: rgba(75,56,38,.4); color: var(--walnut); }
-.stk-r { border-color: rgba(169,133,63,.55); color: var(--brass-deep); }
-.stk:hover, .stk-min:hover { background: var(--paper-3); }
+.stk-l { color: var(--walnut); }
+.stk-r { color: var(--brass-deep); }
+.stk:hover, .stk-min:hover, .tempo button:hover { background: linear-gradient(180deg, #f1e6cd, #e2d4b3); }
+.stk:active, .stk-min:active, .tempo button:active { box-shadow: inset 0 2px 4px rgba(44,30,14,0.28); transform: translateY(1px); }
 .stk-min { color: var(--ink-soft); font-size: 13px; }
 
 .presets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
@@ -103,26 +120,35 @@ body[data-view="play"] .spread {
 .presets button:hover { color: var(--ink); padding-left: 5px; }
 
 .tempo { display: grid; grid-template-columns: 40px 1fr 40px; gap: 10px; align-items: center; }
-.tempo button { border: 1px solid var(--rule); background: var(--paper-2); border-radius: 3px; font-size: 20px; color: var(--ink); padding: 6px 0; }
-.tempo button:hover { background: var(--paper-3); }
+.tempo button { font-size: 20px; padding: 6px 0; }
 .tempo-n { text-align: center; }
-.tempo-n b { font-family: var(--serif); font-size: 34px; font-weight: 500; display: block; line-height: 1; }
+.tempo-n b { font-family: var(--serif); font-size: 34px; font-weight: 500; display: block; line-height: 1; text-shadow: 0 1px 0 rgba(255,248,231,0.5); }
 .tempo-n i { font-size: 11px; color: var(--ink-faint); font-style: normal; }
 .loop { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: var(--ink-soft); }
 .loop input { accent-color: var(--brass); }
 
+/* a stamped brass plate */
 .begin {
-  border: 1px solid var(--brass-deep); background: var(--brass); color: #241905;
-  font-family: var(--serif); font-size: 17px; font-weight: 500; padding: 13px; border-radius: 3px;
-  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset; transition: background .12s;
+  border: 1px solid #6e5322; color: #2b1e05;
+  background: linear-gradient(180deg, #c8a054 0%, #ab8740 55%, #9a7734 100%);
+  font-family: var(--serif); font-size: 17px; font-weight: 500; padding: 13px; border-radius: 4px;
+  text-shadow: 0 1px 0 rgba(240,214,150,0.6);
+  box-shadow: inset 0 1px 0 rgba(255,240,200,0.55), inset 0 -2px 4px rgba(90,66,20,0.35), 0 2px 5px rgba(44,30,14,0.3);
+  transition: background .12s, transform .06s;
 }
-.begin:hover { background: #b8934a; }
-.begin.live { background: var(--burgundy); border-color: #5f2a25; color: #f3e3d8; }
+.begin:hover { background: linear-gradient(180deg, #d0a95c, #b28c44); }
+.begin:active { transform: translateY(1px); box-shadow: inset 0 2px 5px rgba(90,66,20,0.4); }
+.begin.live {
+  border-color: #532420; color: #f3e3d8;
+  background: linear-gradient(180deg, #8e463f, #7c3a34 55%, #6c322d 100%);
+  text-shadow: 0 1px 0 rgba(60,20,16,0.5);
+  box-shadow: inset 0 1px 0 rgba(220,150,140,0.35), inset 0 -2px 4px rgba(50,18,14,0.4), 0 2px 5px rgba(44,30,14,0.3);
+}
 
 .tally { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; margin: 4px 0 0; }
-.tally div { border-top: 1px solid var(--rule-soft); padding-top: 8px; }
+.tally div { border-top: 1px solid rgba(120,95,55,0.28); padding-top: 8px; }
 .tally dt { font-size: 11px; letter-spacing: .3px; color: var(--ink-faint); text-transform: uppercase; }
-.tally dd { margin: 2px 0 0; font-family: var(--serif); font-size: 24px; }
+.tally dd { margin: 2px 0 0; font-family: var(--serif); font-size: 24px; text-shadow: 0 1px 0 rgba(255,248,231,0.45); }
 
 /* the instrument — lane pours down onto the drum, one continuous surface */
 .instrument { display: flex; flex-direction: column; min-height: 0; padding: 0; }
@@ -149,7 +175,7 @@ body[data-view="play"] .spread {
 
 /* ============================================================= BOARDS */
 .board { height: 100%; overflow: auto; padding: 30px 40px 44px; }
-.board-title { font-family: var(--serif); font-size: 30px; font-weight: 500; margin: 0 0 8px; }
+.board-title { font-family: var(--serif); font-size: 30px; font-weight: 500; margin: 0 0 8px; text-shadow: 0 1px 0 rgba(255,248,231,0.5); }
 .board-lede { max-width: 620px; color: var(--ink-soft); font-size: 15px; line-height: 1.55; margin: 0 0 26px; }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px 34px; }
