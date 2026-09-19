@@ -10,10 +10,13 @@
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-const LEFT = '#33d6c1', RIGHT = '#ff9c3c';
+const LEFT = '#4b3826', RIGHT = '#a9853f';      // walnut ink / brass
+const WAL_RGB = '75,56,38', BRASS_RGB = '169,133,63';
+const rgbOf = (h) => (h === 'L' ? WAL_RGB : BRASS_RGB);
 const handColor = (h) => (h === 'L' ? LEFT : RIGHT);
+const INK = '#2c2419', INK_SOFT = 'rgba(44,36,25,0.55)', RULE = 'rgba(44,36,25,0.14)';
 const POINTS = { perfect: 100, good: 70, okay: 40, bad: 0 };
-const VERDICT_COL = { perfect: '#eafff6', good: '#b7f0c2', okay: '#ecd08a', bad: '#e97f6f', stray: '#e97f6f' };
+const VERDICT_COL = { perfect: '#7d5f28', good: '#5b5040', okay: '#8a7c64', bad: '#7c3a34', stray: '#7c3a34' };
 const LEADIN = 2.2;
 
 /* ---- config / geometry ------------------------------------------------ */
@@ -98,7 +101,7 @@ $('.presets').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   pattern = b.dataset.preset.split(''); drawSeq();
 });
-$('.bpm').addEventListener('click', (e) => {
+$('.tempo').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   bpm = Math.max(30, Math.min(240, bpm + parseInt(b.dataset.bpm, 10)));
   $('#bpmVal').textContent = bpm;
@@ -130,7 +133,7 @@ function extendNotes(t) {
   }
 }
 async function startSession() {
-  if (pattern.length === 0) { flash('stray', 'ADD A PATTERN'); return; }
+  if (pattern.length === 0) { flash('stray', 'add a pattern first'); return; }
   try { await fetch('/set_pattern', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern: pattern.join('') }) }); } catch (_) {}
   Object.assign(session, {
     running: true, start: performance.now(), beat: 60 / bpm, loop: $('#loopChk').checked,
@@ -190,11 +193,11 @@ function judge(st) {
     const cls = bd <= w.p ? 'perfect' : bd <= w.g ? 'good' : 'okay';
     best.judged = true; best.result = { cls, delta, correct, st };
     session.events.push({ kind: 'hit', idx: best.idx, target: best.hand, actual: st.hand, delta, correct, cls, nx: st.nx, ny: st.ny, zone: st.zone, type: st.type });
-    if (correct) { session.score += POINTS[cls]; session.counters[cls]++; session.combo++; session.maxCombo = Math.max(session.maxCombo, session.combo); flash(cls, cls.toUpperCase()); }
-    else { session.counters.bad++; session.combo = 0; flash('bad', 'WRONG HAND'); }
+    if (correct) { session.score += POINTS[cls]; session.counters[cls]++; session.combo++; session.maxCombo = Math.max(session.maxCombo, session.combo); flash(cls, cls); }
+    else { session.counters.bad++; session.combo = 0; flash('bad', 'other hand'); }
   } else {
     session.events.push({ kind: 'extra', actual: st.hand, nx: st.nx, ny: st.ny, zone: st.zone, type: st.type });
-    session.counters.bad++; session.combo = 0; flash('stray', 'STRAY');
+    session.counters.bad++; session.combo = 0; flash('stray', 'off pattern');
   }
   updateReadouts();
 }
@@ -215,96 +218,121 @@ function updateReadouts() {
   $('#roAcc').textContent = tot ? Math.round((good / tot) * 100) + '%' : '—';
 }
 function showHud(hand, type, zone) {
-  const el = $('#hudHand'); el.textContent = hand; el.style.color = handColor(hand);
-  $('#hudType').textContent = type; $('#hudZone').textContent = zone === 'off' ? '' : zone + ' zone';
+  const el = $('#hudHand');
+  el.textContent = hand === 'L' ? 'left' : 'right';
+  el.style.color = handColor(hand);
+  $('#hudType').textContent = type;
+  $('#hudZone').textContent = zone === 'off' ? '' : zone;
 }
 function flash(kind, text) {
   const v = $('#verdict'); v.textContent = text; v.style.color = VERDICT_COL[kind] || '#fff';
   v.classList.remove('show'); void v.offsetWidth; v.classList.add('show');
 }
 
-/* ---- render: lane ----------------------------------------------------- */
+/* ---- render: lane (a ruled practice sheet the pattern descends) ------- */
 function drawLane() {
   const { ctx, w, h } = LANE; if (!w) return;
   ctx.clearRect(0, 0, w, h);
   const t = session.running ? (performance.now() - session.start) / 1000 : 0;
   if (session.running) { extendNotes(t); sweepMisses(t); }
-  const hitY = h * 0.8, travel = 2.4, pps = hitY / travel;
-  const cxc = w / 2, off = w * 0.22;
+  const hitY = h - 2, travel = 2.4, pps = h / travel;   // strike line at the very foot
+  const cxc = w / 2, off = Math.min(w * 0.2, 92);
 
-  // rails
-  ctx.strokeStyle = 'rgba(255,238,210,0.05)'; ctx.lineWidth = 1;
+  // scrolling beat rules — rhythm read through motion, not labels
+  ctx.lineWidth = 1;
+  for (let k = -1; k < travel + 2; k++) {
+    const bt = Math.ceil(t) + k;
+    const yy = hitY - (bt - t) * pps;
+    if (yy < -2 || yy > h) continue;
+    const bar = bt % 4 === 0;
+    ctx.strokeStyle = bar ? 'rgba(44,36,25,0.16)' : 'rgba(44,36,25,0.07)';
+    ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(w, yy); ctx.stroke();
+  }
+  // two faint hand rails
+  ctx.strokeStyle = 'rgba(44,36,25,0.08)';
   [cxc - off, cxc + off].forEach((x) => { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, hitY); ctx.stroke(); });
 
-  // beat pulse on the hit line
-  let pulse = 0;
-  if (session.running) { const ph = ((t) % session.beat) / session.beat; pulse = Math.max(0, 1 - ph * 3); }
-  ctx.fillStyle = `rgba(255,238,210,${0.05 + pulse * 0.12})`;
-  ctx.fillRect(0, hitY - 3, w, 6);
-  // hand targets at the line
-  [['L', cxc - off, LEFT], ['R', cxc + off, RIGHT]].forEach(([lab, x, col]) => {
-    ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x, hitY, 20, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
-    ctx.fillStyle = col; ctx.globalAlpha = 0.25; ctx.font = '700 13px var(--mono, monospace)';
+  // brass strike line
+  ctx.strokeStyle = 'rgba(125,95,40,0.85)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, hitY - 1); ctx.lineTo(w, hitY - 1); ctx.stroke();
+  [cxc - off, cxc + off].forEach((x) => {
+    ctx.strokeStyle = 'rgba(125,95,40,0.5)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, hitY - 1, 15, Math.PI, 0); ctx.stroke();
   });
-  ctx.globalAlpha = 1;
 
-  // notes
+  // notes — small warm discs; hand read by tone + rail, no shouting letters
   for (const n of session.notes) {
     const dt = n.time - t;
-    if (dt > travel + 0.3 || dt < -0.6) continue;
+    if (dt > travel + 0.3 || dt < -0.5) continue;
     const y = hitY - dt * pps;
     const x = n.hand === 'L' ? cxc - off : cxc + off;
-    const col = handColor(n.hand);
-    let a = 1, sc = 1;
-    if (n.judged && n.result) { const age = t - n.time; a = Math.max(0, 1 - age * 2.5); sc = 1 + Math.min(0.5, Math.max(0, age) * 2); }
-    if (n.missed) { a = 0.22; }
+    const rgb = rgbOf(n.hand);
+    let a = 1, r = 11;
+    if (n.judged && n.result) { const age = t - n.time; a = Math.max(0, 1 - age * 2.2); r = 11 + Math.min(7, Math.max(0, age) * 26); }
+    if (n.missed) { a = 0.4; }
     ctx.globalAlpha = a;
-    const s = 26 * sc;
-    ctx.shadowColor = col; ctx.shadowBlur = n.missed ? 0 : 16;
-    ctx.fillStyle = n.missed ? '#2a2319' : col;
-    rr(ctx, x - s / 2, y - s / 2, s, s, 8); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = n.missed ? col : '#15120d';
-    ctx.font = '800 15px var(--mono, monospace)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(n.hand, x, y + 1);
+    if (n.missed) {
+      ctx.strokeStyle = `rgba(${rgb},0.7)`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      ctx.fillStyle = `rgb(${rgb})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = n.hand === 'L' ? 'rgba(28,20,10,0.5)' : 'rgba(90,66,20,0.5)';
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+      // faint inner mark for the brass (right) so tone difference is unmistakable up close
+      if (n.hand === 'R') { ctx.fillStyle = 'rgba(233,223,202,0.5)'; ctx.beginPath(); ctx.arc(x, y, r * 0.32, 0, Math.PI * 2); ctx.fill(); }
+    }
     ctx.globalAlpha = 1;
   }
 }
 
-/* ---- render: drum ----------------------------------------------------- */
+/* ---- render: the drum (the instrument — warm, matte, tactile) --------- */
+function blot(ctx, x, y, r, rgb, a) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, `rgba(${rgb},${a})`); g.addColorStop(0.55, `rgba(${rgb},${a * 0.45})`); g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
 function drawDrum(target, big) {
   const { ctx, w, h } = target; if (!w) return;
   ctx.clearRect(0, 0, w, h);
-  const cx = w / 2, cy = h / 2, R = Math.min(w, h) * (big ? 0.4 : 0.44);
+  const cx = w / 2, cy = h * (big ? 0.48 : 0.5), R = big ? Math.min(w * 0.42, h * 0.44) : Math.min(w, h) * 0.44;
   const z = cfg.zones, now = performance.now();
+  const rimR = R * (1 + geom().rim_width / geom().radius) + (big ? 14 : 8);
 
-  // rim band
-  const rimR = R * (1 + geom().rim_width / geom().radius);
-  ctx.fillStyle = '#0e0b07'; ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,238,210,0.14)'; ctx.lineWidth = big ? 5 : 3;
-  ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.stroke();
+  // wooden shell / rim with soft physical depth
+  ctx.save();
+  ctx.shadowColor = 'rgba(40,28,14,0.28)'; ctx.shadowBlur = big ? 26 : 14; ctx.shadowOffsetY = big ? 8 : 4;
+  const rim = ctx.createRadialGradient(cx, cy - rimR * 0.3, rimR * 0.6, cx, cy, rimR);
+  rim.addColorStop(0, '#5a4127'); rim.addColorStop(0.7, '#3f2c19'); rim.addColorStop(1, '#291b0e');
+  ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(20,12,4,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, rimR, 0, Math.PI * 2); ctx.stroke();
 
-  // pad surface
-  const g = ctx.createRadialGradient(cx, cy - R * 0.2, R * 0.1, cx, cy, R);
-  g.addColorStop(0, '#241d15'); g.addColorStop(1, '#181309');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // drumhead — warm coated skin, matte, lit gently from upper-left
+  const head = ctx.createRadialGradient(cx - R * 0.28, cy - R * 0.32, R * 0.15, cx, cy, R);
+  head.addColorStop(0, '#e7d4ac'); head.addColorStop(0.7, '#d8c199'); head.addColorStop(1, '#c3a97e');
+  ctx.fillStyle = head; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  // seam where head meets rim
+  ctx.strokeStyle = 'rgba(90,66,32,0.5)'; ctx.lineWidth = big ? 3 : 2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
 
-  // zone rings
-  ctx.strokeStyle = 'rgba(255,238,210,0.08)'; ctx.lineWidth = 1;
+  // restrained concentric practice zones, pencilled
+  ctx.strokeStyle = 'rgba(70,52,28,0.16)'; ctx.lineWidth = 1;
   [z.inner, z.middle, z.outer].forEach((rr2) => { ctx.beginPath(); ctx.arc(cx, cy, R * rr2, 0, Math.PI * 2); ctx.stroke(); });
-  ctx.strokeStyle = 'rgba(255,238,210,0.05)';
-  ctx.beginPath(); ctx.moveTo(cx - 6, cy); ctx.lineTo(cx + 6, cy); ctx.moveTo(cx, cy - 6); ctx.lineTo(cx, cy + 6); ctx.stroke();
+  // small maker's mark at centre
+  ctx.strokeStyle = 'rgba(70,52,28,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.05, 0, Math.PI * 2); ctx.stroke();
 
-  // ripples
-  session.ripples = session.ripples.filter((rp) => now - rp.born < 900);
+  // strike marks — soft ink (left) / brass (right) blotches that settle and fade
+  session.ripples = session.ripples.filter((rp) => now - rp.born < 1400);
   for (const rp of session.ripples) {
-    const age = (now - rp.born) / 900;
-    const px = cx + rp.nx * R, py = cy + rp.ny * R, col = handColor(rp.hand);
-    ctx.globalAlpha = (1 - age) * 0.8; ctx.strokeStyle = col; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(px, py, 6 + age * (big ? 60 : 40), 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1 - age; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14;
-    ctx.beginPath(); ctx.arc(px, py, big ? 8 : 5, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+    const age = (now - rp.born) / 1400;
+    const px = cx + rp.nx * R, py = cy + rp.ny * R, rgb = rgbOf(rp.hand);
+    blot(ctx, px, py, (big ? 26 : 18) * (0.6 + age * 0.7), rgb, (1 - age) * 0.5);
+    ctx.globalAlpha = (1 - age) * 0.85;
+    ctx.fillStyle = `rgb(${rgb})`;
+    ctx.beginPath(); ctx.arc(px, py, big ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = (1 - age) * 0.35; ctx.strokeStyle = `rgb(${rgb})`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, (big ? 10 : 7) + age * (big ? 30 : 18), 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
 }
@@ -316,26 +344,29 @@ function drawCalPreview() {
   const cw = cfg.camera.width || 640, ch = cfg.camera.height || 480;
   const s = Math.min(w / cw, h / ch), ox = (w - cw * s) / 2, oy = (h - ch * s) / 2;
   const fx = (x) => ox + x * s, fy = (y) => oy + y * s;
-  // frame
-  ctx.fillStyle = '#0e0b07'; ctx.fillRect(ox, oy, cw * s, ch * s);
-  ctx.strokeStyle = 'rgba(255,238,210,0.12)'; ctx.strokeRect(ox, oy, cw * s, ch * s);
+  // camera frame
+  ctx.fillStyle = '#2a1f16'; ctx.fillRect(ox, oy, cw * s, ch * s);
+  ctx.strokeStyle = 'rgba(44,36,25,0.3)'; ctx.strokeRect(ox, oy, cw * s, ch * s);
   const g = geom(), z = cfg.zones;
-  // pad + zones
-  ctx.strokeStyle = 'rgba(255,238,210,0.5)'; ctx.lineWidth = 2;
+  // pad surface + zones
+  const head = ctx.createRadialGradient(fx(g.center_x) - g.radius * s * 0.3, fy(g.center_y) - g.radius * s * 0.3, g.radius * s * 0.15, fx(g.center_x), fy(g.center_y), g.radius * s);
+  head.addColorStop(0, '#e0cca2'); head.addColorStop(1, '#bda070');
+  ctx.fillStyle = head; ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(90,66,32,0.7)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * s, 0, Math.PI * 2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,238,210,0.18)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(70,52,28,0.28)'; ctx.lineWidth = 1;
   [z.inner, z.middle, z.outer].forEach((r) => { ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), g.radius * r * s, 0, Math.PI * 2); ctx.stroke(); });
-  ctx.strokeStyle = 'rgba(255,238,210,0.3)'; ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(90,66,32,0.4)'; ctx.setLineDash([4, 4]);
   ctx.beginPath(); ctx.arc(fx(g.center_x), fy(g.center_y), (g.radius + g.rim_width) * s, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-  // live tips
+  // live tracked tips
   [['L', LEFT], ['R', RIGHT]].forEach(([k, col]) => {
     const p = liveTips[k], out = $(k === 'L' ? '#calL' : '#calR');
     if (p && p.length >= 2) {
       out.textContent = `${Math.round(p[0])}, ${Math.round(p[1])}`;
-      ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.arc(fx(p[0]), fy(p[1]), 7, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
-      ctx.fillStyle = '#15120d'; ctx.font = '800 10px var(--mono, monospace)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(k, fx(p[0]), fy(p[1]) + 1);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(fx(p[0]), fy(p[1]), 7, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(233,223,202,0.85)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(fx(p[0]), fy(p[1]), 7, 0, Math.PI * 2); ctx.stroke();
     } else { out.textContent = 'no track'; }
   });
 }
@@ -378,13 +409,13 @@ async function renderAnalysis() {
   };
   let sc = 0; try { sc = (await (await fetch('/score')).json()).score || 0; } catch (_) {}
   $('#anaHands').innerHTML = bar('Left hand', LEFT, L.ok, L.tot) + bar('Right hand', RIGHT, R.ok, R.tot) +
-    `<div class="bar"><div class="bar-top"><span>Backend L/R match</span><b>${Math.round(sc * 100)}%</b></div><div class="track"><div class="fill" style="width:${Math.round(sc * 100)}%;background:#cdbfa4"></div></div></div>`;
+    `<div class="bar"><div class="bar-top"><span>Sequence match</span><b>${Math.round(sc * 100)}%</b></div><div class="track"><div class="fill" style="width:${Math.round(sc * 100)}%;background:rgba(125,95,40,0.7)"></div></div></div>`;
 
   // hit types
   const types = {}; ev.forEach((e) => { if (e.type) types[e.type] = (types[e.type] || 0) + 1; });
   const tmax = Math.max(1, ...Object.values(types));
   $('#anaTypes').innerHTML = Object.keys(types).length
-    ? Object.entries(types).map(([k, v]) => `<div class="bar"><div class="bar-top"><span>${k}</span><b>${v}</b></div><div class="track"><div class="fill" style="width:${(v / tmax) * 100}%;background:#cdbfa4"></div></div></div>`).join('')
+    ? Object.entries(types).map(([k, v]) => `<div class="bar"><div class="bar-top"><span>${k}</span><b>${v}</b></div><div class="track"><div class="fill" style="width:${(v / tmax) * 100}%;background:rgba(125,95,40,0.7)"></div></div></div>`).join('')
     : '<div class="bar"><div class="bar-top"><span>no hit-type data</span></div></div>';
 
   // mistakes
@@ -402,26 +433,29 @@ function drawTiming() {
   fit(ATIM); const { ctx, w, h } = ATIM; ctx.clearRect(0, 0, w, h);
   const hits = session.events.filter((e) => e.kind === 'hit');
   const cx = w / 2, scale = w * 0.42 / Math.max(0.12, windows().o);
-  ctx.strokeStyle = 'rgba(255,238,210,0.25)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(44,36,25,0.4)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cx, 8); ctx.lineTo(cx, h - 8); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,238,210,0.06)';
+  ctx.strokeStyle = 'rgba(44,36,25,0.1)';
   [-1, 1].forEach((s) => { const x = cx + s * windows().g * scale; ctx.beginPath(); ctx.moveTo(x, 10); ctx.lineTo(x, h - 10); ctx.stroke(); });
   hits.forEach((e, i) => {
     const x = Math.max(6, Math.min(w - 6, cx + e.delta * scale));
     const y = 14 + ((i * 37) % (h - 28));
-    ctx.fillStyle = handColor(e.actual); ctx.globalAlpha = e.correct ? 0.9 : 0.4;
+    ctx.fillStyle = handColor(e.actual); ctx.globalAlpha = e.correct ? 0.9 : 0.35;
     ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
   });
 }
 function drawPlacement() {
   fit(ADRUM); const { ctx, w, h } = ADRUM; ctx.clearRect(0, 0, w, h);
   const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.42, z = cfg.zones;
-  ctx.fillStyle = '#181309'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,238,210,0.12)';
-  [z.inner, z.middle, z.outer, 1].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
+  const head = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.15, cx, cy, R);
+  head.addColorStop(0, '#e7d4ac'); head.addColorStop(1, '#c3a97e');
+  ctx.fillStyle = head; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(90,66,32,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(70,52,28,0.16)'; ctx.lineWidth = 1;
+  [z.inner, z.middle, z.outer].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
   session.events.filter((e) => e.nx != null).forEach((e) => {
-    ctx.fillStyle = handColor(e.actual); ctx.globalAlpha = 0.75;
-    ctx.beginPath(); ctx.arc(cx + e.nx * R, cy + e.ny * R, 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgba(${rgbOf(e.actual)},0.8)`;
+    ctx.beginPath(); ctx.arc(cx + e.nx * R, cy + e.ny * R, 4, 0, Math.PI * 2); ctx.fill();
   });
 }
 

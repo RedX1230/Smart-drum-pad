@@ -3,150 +3,132 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Drum Pad — Rhythm Trainer</title>
+  <title>Smart Drum Pad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body data-view="play">
 
-  <header class="deck">
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">SMART&nbsp;DRUM&nbsp;PAD</span>
-      <span class="brand-sub">rhythm trainer</span>
-    </div>
-    <nav class="viewnav" id="viewnav">
-      <button data-goto="play" class="on">Play</button>
-      <button data-goto="analysis">Analysis</button>
-      <button data-goto="calibrate">Calibrate</button>
+  <header class="masthead">
+    <div class="wordmark">Smart Drum Pad<span class="dot">.</span></div>
+    <nav class="tabs" id="viewnav">
+      <button data-goto="play" class="on">Practice</button>
+      <button data-goto="analysis">Review</button>
+      <button data-goto="calibrate">Setup</button>
     </nav>
-    <div class="link" id="link" title="detector link">
-      <span class="link-dot"></span>
-      <span class="link-text">detector</span>
-    </div>
+    <div class="status" id="link"><span class="link-dot"></span><span class="link-text">listening</span></div>
   </header>
 
-  <!-- ============================ PLAY ============================ -->
-  <main class="stage view-play">
+  <!-- ============================ PRACTICE ============================ -->
+  <main class="view-play spread">
 
-    <!-- setup rail -->
-    <aside class="rail">
-      <div class="rail-block">
-        <div class="rail-label">Target pattern</div>
+    <aside class="margin">
+      <section class="m-block">
+        <h2 class="m-title">Pattern</h2>
         <div class="seq" id="seqStrip" aria-live="polite"></div>
         <div class="handpad">
-          <button class="hand hand-l" data-append="L">L</button>
-          <button class="hand hand-r" data-append="R">R</button>
-          <button class="hand hand-del" data-seq="back" title="delete">⌫</button>
-          <button class="hand hand-del" data-seq="clear" title="clear">clr</button>
+          <button data-append="L" class="stk stk-l">L</button>
+          <button data-append="R" class="stk stk-r">R</button>
+          <button data-seq="back" class="stk-min" title="delete">⌫</button>
+          <button data-seq="clear" class="stk-min">clear</button>
         </div>
-        <div class="presets">
-          <button data-preset="LR">Single · LR</button>
-          <button data-preset="LLRR">Double · LLRR</button>
-          <button data-preset="LRRL">Paradiddle · LRRL</button>
-          <button data-preset="LLRLLR">Triplet · LLRLLR</button>
+        <ul class="presets">
+          <li><button data-preset="LR">Single stroke</button></li>
+          <li><button data-preset="LLRR">Double stroke</button></li>
+          <li><button data-preset="LRRL">Paradiddle</button></li>
+          <li><button data-preset="LLRLLR">Triplet feel</button></li>
+        </ul>
+      </section>
+
+      <section class="m-block">
+        <h2 class="m-title">Tempo</h2>
+        <div class="tempo">
+          <button data-bpm="-5" aria-label="slower">–</button>
+          <span class="tempo-n"><b id="bpmVal">90</b><i>beats per minute</i></span>
+          <button data-bpm="5" aria-label="faster">+</button>
         </div>
-      </div>
+        <label class="loop"><input type="checkbox" id="loopChk" checked /> repeat the phrase</label>
+      </section>
 
-      <div class="rail-block">
-        <div class="rail-label">Tempo</div>
-        <div class="bpm">
-          <button data-bpm="-5">–</button>
-          <div class="bpm-read"><span id="bpmVal">90</span><small>BPM</small></div>
-          <button data-bpm="5">+</button>
-        </div>
-        <label class="loopline"><input type="checkbox" id="loopChk" checked /> loop pattern</label>
-      </div>
+      <button class="begin" id="transport">Begin practice</button>
 
-      <button class="transport" id="transport">Start session</button>
-
-      <div class="rail-block readouts">
-        <div class="ro"><span>Score</span><b id="roScore">0</b></div>
-        <div class="ro"><span>Combo</span><b id="roCombo">0</b></div>
-        <div class="ro"><span>Accuracy</span><b id="roAcc">—</b></div>
-        <div class="ro"><span>Struck BPM</span><b id="roBpm">—</b></div>
-      </div>
+      <dl class="tally">
+        <div><dt>Score</dt><dd id="roScore">0</dd></div>
+        <div><dt>Streak</dt><dd id="roCombo">0</dd></div>
+        <div><dt>Accuracy</dt><dd id="roAcc">—</dd></div>
+        <div><dt>Struck</dt><dd id="roBpm">—</dd></div>
+      </dl>
     </aside>
 
-    <!-- pattern lane -->
-    <section class="lane-wrap">
-      <div class="lane-head">
-        <span class="rail-l">LEFT</span>
-        <span class="lane-title">incoming</span>
-        <span class="rail-r">RIGHT</span>
+    <section class="instrument">
+      <div class="lane-hold">
+        <canvas id="lane"></canvas>
+        <div class="verdict" id="verdict"></div>
       </div>
-      <canvas id="lane"></canvas>
-      <div class="verdict" id="verdict"></div>
-    </section>
-
-    <!-- the single drum -->
-    <section class="drum-wrap">
-      <canvas id="drum"></canvas>
-      <div class="drum-hud">
-        <div class="hud-hand" id="hudHand">—</div>
-        <div class="hud-meta"><span id="hudType">awaiting strike</span><i id="hudZone"></i></div>
+      <div class="drum-hold">
+        <canvas id="drum"></canvas>
+        <p class="reading"><span id="hudHand"></span><span id="hudType">ready when you are</span><i id="hudZone"></i></p>
       </div>
     </section>
   </main>
 
-  <!-- ========================== ANALYSIS ========================== -->
-  <section class="board view-analysis" hidden>
-    <div class="board-head">
-      <h2>Session analysis</h2>
-      <p id="anaEmpty">Play a pattern to build a breakdown of hand, timing, placement and consistency.</p>
-    </div>
+  <!-- ============================= REVIEW ============================= -->
+  <section class="view-analysis board" hidden>
+    <h1 class="board-title">The session, looked over</h1>
+    <p id="anaEmpty" class="board-lede">Play a phrase and this page fills with how it went — the hand you used, whether you sat ahead of or behind the beat, where the stick landed, and where the sequence slipped.</p>
 
     <div class="cards" id="anaCards">
       <article class="card wide">
-        <h3>Target vs actual</h3>
+        <h3>What you played against what was asked</h3>
         <div class="seqcompare" id="anaSeq"></div>
       </article>
 
       <article class="card">
-        <h3>Timing — early / late</h3>
+        <h3>Ahead of, or behind, the beat</h3>
         <div class="timing"><canvas id="anaTiming"></canvas></div>
-        <div class="timing-legend"><span>early</span><i>on beat</i><span>late</span></div>
+        <div class="timing-legend"><span>early</span><i>on the beat</i><span>late</span></div>
       </article>
 
       <article class="card">
-        <h3>Hand accuracy</h3>
+        <h3>Each hand, on its own</h3>
         <div class="handbars" id="anaHands"></div>
       </article>
 
       <article class="card">
-        <h3>Strike placement</h3>
+        <h3>Where the stick landed</h3>
         <div class="minidrum"><canvas id="anaDrum"></canvas></div>
       </article>
 
       <article class="card">
-        <h3>Hit type</h3>
+        <h3>How you struck</h3>
         <div class="typebars" id="anaTypes"></div>
       </article>
 
       <article class="card wide">
-        <h3>Sequence mistakes</h3>
+        <h3>Where it slipped</h3>
         <ul class="mistakes" id="anaMistakes"></ul>
       </article>
     </div>
   </section>
 
-  <!-- ========================= CALIBRATE ========================= -->
-  <section class="board view-calibrate" hidden>
-    <div class="board-head">
-      <h2>Calibration &amp; detection</h2>
-      <p>Live view of what the camera and audio detector currently see. Adjust the physical setup until the tracked tips sit on the pad, then run the calibration tool to save.</p>
-    </div>
+  <!-- ============================= SETUP ============================= -->
+  <section class="view-calibrate board" hidden>
+    <h1 class="board-title">Setting up the pad</h1>
+    <p class="board-lede">A live look at what the camera and microphone pick up. Move the pad or the sticks until the marks sit where they should, then save the boundary from the calibration tool.</p>
 
     <div class="cal-grid">
       <div class="cal-preview">
         <canvas id="calDrum"></canvas>
         <div class="cal-tips">
-          <span class="tip tip-l">L <b id="calL">no track</b></span>
-          <span class="tip tip-r">R <b id="calR">no track</b></span>
+          <span class="tip tip-l">left <b id="calL">no track</b></span>
+          <span class="tip tip-r">right <b id="calR">no track</b></span>
         </div>
       </div>
       <div class="cal-params" id="calParams"></div>
     </div>
-    <p class="cal-note">Detection parameters live in <code>config.yaml</code>. Run <code>python -m src.calibrate_pad</code> to redraw the pad boundary, or <code>python -m src.calibrate_height</code> for the side camera. Zone ratios and audio threshold are read here live.</p>
+    <p class="cal-note">Detection settings live in <code>config.yaml</code>. Run <code>python -m src.calibrate_pad</code> to redraw the pad boundary, or <code>python -m src.calibrate_height</code> for the side camera. Zone spacing and the audio threshold shown here are read live.</p>
   </section>
 
   <script src="/static/app.js"></script>
