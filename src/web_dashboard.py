@@ -4,27 +4,61 @@ import os
 import logging
 import yaml
 
+from src.session_recorder import SessionRecorder
+
 # Silence Flask/Werkzeug logs so they don't hide the interactive terminal prompts
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-# Absolute path to the static folder in the project root
-static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'static'))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+static_dir = os.path.join(BASE_DIR, 'static')
+CONFIG_PATH = os.path.join(BASE_DIR, 'config.yaml')
 
 # Flask app – serve UI from the 'static' folder (HTML, CSS, JS)
 app = Flask(__name__, static_folder=static_dir, static_url_path='/static')
 collector = None
 pattern_evaluator = None
+recorder = SessionRecorder()
+
+# Editable config keys, grouped, with a coercion function. Anything outside
+# this whitelist is ignored on write so the web UI can't corrupt config.yaml.
+_EDITABLE = {
+    'camera':      {'index': int, 'width': int, 'height': int},
+    'calibration': {'center_x': int, 'center_y': int, 'radius': int, 'rim_width': int},
+    'zones':       {'inner': float, 'middle': float, 'outer': float},
+    'audio':       {'threshold': float, 'sample_rate': int, 'device_index': int, 'latency_ms': float},
+}
+
 
 def set_collector(col):
     """Register the MetricsCollector instance for the Flask routes."""
     global collector
     collector = col
 
+
 def set_pattern_evaluator(evaluator):
     """Register the PatternEvaluator instance for the Flask routes."""
     global pattern_evaluator
     pattern_evaluator = evaluator
+
+
+def ingest_strike(strike):
+    """Single ingestion point for a detected strike: feeds the metrics
+    collector and the pattern evaluator. Called directly by the core loop
+    (in-process) so there is no HTTP round-trip and no double counting."""
+    if collector is not None and strike:
+        collector.add_strike(strike)
+    if pattern_evaluator is not None and strike:
+        pattern_evaluator.add_strike(strike)
+
+
+def _load_config():
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            return yaml.safe_load(f) or {}
+    except (FileNotFoundError, yaml.YAMLError):
+        return {}
+
 
 # ---------------------------------------------------------------------
 # UI route
@@ -33,6 +67,7 @@ def set_pattern_evaluator(evaluator):
 def index():
     """Serve the main dashboard page (index.html)."""
     return send_from_directory(app.static_folder, 'index.html')
+
 
 # ---------------------------------------------------------------------
 # Data API routes
@@ -44,15 +79,6 @@ def metrics():
         return jsonify({})
     return jsonify(collector.to_dict())
 
-@app.route('/post_strike', methods=['POST'])
-def post_strike():
-    """Receive a strike from the core app, forward it to the collector and optionally the pattern evaluator."""
-    data = request.get_json()
-    if collector is not None and data:
-        collector.add_strike(data)
-    if pattern_evaluator is not None and data:
-        pattern_evaluator.add_strike(data)
-    return ('', 204)
 
 @app.route('/set_pattern', methods=['POST'])
 def set_pattern():
@@ -67,6 +93,7 @@ def set_pattern():
         pattern_evaluator = PatternEvaluator(pat)
     return ('', 204)
 
+
 @app.route('/score')
 def score():
     """Return the current pattern match score (0‑1)."""
@@ -74,17 +101,49 @@ def score():
         return jsonify({"score": 0.0})
     return jsonify({"score": pattern_evaluator.evaluate()})
 
-@app.route('/config')
+
+@app.route('/config', methods=['GET', 'POST'])
 def config():
-    """Return the pad calibration, zone and device settings so the UI can
-    place strikes on an accurate drum representation. Read‑only."""
-    cfg_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'config.yaml'))
+    """GET: camera / calibration / zone / audio settings for the UI.
+    POST: merge whitelisted numeric settings back into config.yaml so the
+    Setup screen can tune the pad. Applied on the next detector start."""
+    if request.method == 'GET':
+        return jsonify(_load_config())
+
+    payload = request.get_json(silent=True) or {}
+    cfg = _load_config()
+    for group, fields in _EDITABLE.items():
+        incoming = payload.get(group)
+        if not isinstance(incoming, dict):
+            continue
+        section = cfg.setdefault(group, {})
+        for key, cast in fields.items():
+            if key in incoming and incoming[key] is not None:
+                try:
+                    section[key] = cast(incoming[key])
+                except (TypeError, ValueError):
+                    continue
     try:
-        with open(cfg_path, 'r') as f:
-            data = yaml.safe_load(f) or {}
-    except Exception:
-        data = {}
-    return jsonify(data)
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.safe_dump(cfg, f, default_flow_style=False)
+    except OSError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    return jsonify({"ok": True, "config": cfg})
+
+
+@app.route('/session', methods=['POST'])
+def save_session():
+    """Persist a finished practice session (summary computed by the UI)."""
+    data = request.get_json(silent=True) or {}
+    recorder.add(data)
+    return jsonify({"ok": True})
+
+
+@app.route('/sessions')
+def list_sessions():
+    """Return stored practice sessions, newest first."""
+    return jsonify(recorder.all())
+
 
 # ---------------------------------------------------------------------
 # Server launch helper
@@ -92,6 +151,7 @@ def config():
 def _run():
     # Run without Flask reloader or debugger – launched in a daemon thread
     app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)
+
 
 def start_web_server(col):
     """Start Flask server in a background daemon thread and bind the collector.

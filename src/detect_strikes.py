@@ -33,7 +33,9 @@ class AudioStrikeDetector:
         peak_retrigger_ms=10,
         history_size=8,
         motion_threshold=120.0,
+        device=None,
     ):
+        self.device = device
         self.sample_rate = sample_rate
         self.block_size = block_size
         self.threshold_db = threshold_db
@@ -77,6 +79,7 @@ class AudioStrikeDetector:
                 blocksize=self.block_size,
                 callback=self._audio_callback,
                 latency='low',
+                device=self.device,
             )
             self.stream.start()
             self.is_running = True

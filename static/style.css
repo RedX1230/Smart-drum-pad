@@ -80,8 +80,9 @@ button { font-family: inherit; cursor: pointer; }
 .link-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--burgundy); transition: .3s; }
 .link.on .link-dot { background: #5f7a4e; }
 
-.view-play, .view-analysis, .view-calibrate { flex: 1 1 auto; min-height: 0; display: none; }
+.view-play, .view-analysis, .view-history, .view-calibrate { flex: 1 1 auto; min-height: 0; display: none; }
 body[data-view="analysis"] .view-analysis,
+body[data-view="history"] .view-history,
 body[data-view="calibrate"] .view-calibrate { display: block; }
 
 /* =========================================================== PRACTICE */
@@ -272,6 +273,26 @@ body[data-view="play"] .stage { display: grid; grid-template-columns: 264px 1fr;
 .prow b { font-family: var(--serif); color: var(--ink); font-weight: 500; }
 .cal-note { margin-top: var(--sp-4); font-size: 13px; color: var(--ink-3); max-width: 720px; line-height: 1.6; }
 .cal-note code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--walnut); background: var(--surface); padding: 1px 5px; border-radius: 3px; }
+.prow label { color: var(--ink-2); font-size: 14px; }
+.pin {
+  width: 96px; text-align: right; font-family: var(--serif); font-size: 15px; color: var(--ink);
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 4px 8px;
+}
+.pin:focus { outline: none; border-color: var(--brass); }
+.cal-actions { display: flex; align-items: center; gap: var(--sp-2); margin-top: 4px; }
+.begin-sm { margin-top: 0; padding: 9px 18px; font-size: 15px; }
+.cal-status { font-size: 13px; color: var(--ink-2); font-style: italic; font-family: var(--serif); }
+
+/* ============================================================ HISTORY */
+.trend { display: flex; align-items: flex-end; gap: 4px; height: 120px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.tbar { flex: 1 1 0; min-width: 4px; height: 100%; display: flex; align-items: flex-end; }
+.tbar i { display: block; width: 100%; background: linear-gradient(180deg, var(--brass), var(--brass-deep)); border-radius: 2px 2px 0 0; }
+.tbar:hover i { background: var(--ink); }
+.hist-head, .hist-row { display: grid; grid-template-columns: 1.4fr 1.6fr 1fr 0.9fr 1fr 0.8fr; gap: var(--sp-2); align-items: baseline; }
+.hist-head { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); padding: 0 0 8px; border-bottom: 2px solid var(--ink); }
+.hist-row { padding: 11px 0; border-bottom: 1px solid var(--rule-2); font-size: 14px; color: var(--ink-2); }
+.hist-row span:nth-child(2) { font-family: var(--serif); color: var(--ink); }
+.hist-row span:nth-child(4) { font-family: var(--serif); color: var(--ink); }
 
 @media (max-width: 1060px) {
   body[data-view="play"] .stage { grid-template-columns: 1fr; overflow: auto; }

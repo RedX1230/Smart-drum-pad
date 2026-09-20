@@ -1,37 +1,3 @@
-import cv2
-import numpy as np
-import math
-
-
-# CONFIG
-
-WIDTH, HEIGHT = 640, 480
-
-LOWER_RED1 = np.array([0, 60, 60])
-UPPER_RED1 = np.array([10, 200, 200])
-
-LOWER_RED2 = np.array([170, 60, 60])
-UPPER_RED2 = np.array([180, 200, 200])
-
-
-# DRUM DETECTION
-
-def detect_drum(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-
-    kernel = np.ones((5,5), np.uint8)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if not contours:
-        return None
-
-    c = max(contours, key=cv2.contourArea)
-
-    if cv2.contourArea(c) < 5000:
-        return None
 import sys
 import os
 import cv2
@@ -130,8 +96,7 @@ def run_zone_simulation(cam_idx=None, show_mask=True):
                 cv2.waitKey(1)
                 continue
 
-            frame = cv2.flip(frame, 1)
-
+            # OverheadCamera already mirrors the frame; no second flip here.
             if not drum_locked:
                 result = detect_drum(frame)
                 if result is not None:

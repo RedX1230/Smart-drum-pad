@@ -16,6 +16,7 @@
     <nav class="tabs" id="viewnav">
       <button data-goto="play" class="on">Practice</button>
       <button data-goto="analysis">Review</button>
+      <button data-goto="history">History</button>
       <button data-goto="calibrate">Setup</button>
     </nav>
     <div class="status" id="link"><span class="link-dot"></span><span class="link-text">listening</span></div>
@@ -52,6 +53,7 @@
           <button data-bpm="5" aria-label="faster">+</button>
         </div>
         <label class="loop"><input type="checkbox" id="loopChk" checked /> repeat the phrase</label>
+        <label class="loop"><input type="checkbox" id="metroChk" /> metronome click</label>
       </div>
 
       <button class="begin" id="transport">Begin practice</button>
@@ -158,6 +160,44 @@
     </div>
   </section>
 
+  <!-- ============================ HISTORY ============================ -->
+  <section class="view-history review" hidden>
+    <div class="review-inner">
+      <header class="rev-head">
+        <div>
+          <span class="eyebrow">History</span>
+          <h1 class="rev-title">Practice over time</h1>
+        </div>
+        <p class="rev-summary" id="histSummary"></p>
+      </header>
+
+      <p id="histEmpty" class="rev-empty">Finished sessions are saved here. Play a phrase and end it to start building a record of how your accuracy, timing and streaks change.</p>
+
+      <div id="histBody" hidden>
+        <section class="rev-key" id="histKey"></section>
+
+        <section class="rev-block">
+          <div class="rev-block-head">
+            <span class="eyebrow">Accuracy trend</span>
+            <h2>Recent sessions, oldest to newest</h2>
+          </div>
+          <div class="trend" id="histTrend"></div>
+        </section>
+
+        <section class="rev-block">
+          <div class="rev-block-head">
+            <span class="eyebrow">Log</span>
+            <h2>Every session</h2>
+          </div>
+          <div class="hist-head">
+            <span>When</span><span>Phrase</span><span>Tempo</span><span>Accuracy</span><span>Timing</span><span>Streak</span>
+          </div>
+          <div id="histList"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <!-- ============================= SETUP ============================= -->
   <section class="view-calibrate review" hidden>
     <div class="review-inner">
@@ -179,7 +219,7 @@
         </div>
         <div class="cal-params" id="calParams"></div>
       </div>
-      <p class="cal-note">Detection settings live in <code>config.yaml</code>. Run <code>python -m src.calibrate_pad</code> to redraw the pad boundary, or <code>python -m src.calibrate_height</code> for the side camera. Zone spacing and the audio threshold shown here are read live.</p>
+      <p class="cal-note">Edit any value and press <em>Save settings</em> to write it to <code>config.yaml</code>; changes apply the next time the detector starts. For automatic pad-boundary detection from the camera, run <code>python -m src.calibrate_pad</code>.</p>
     </div>
   </section>
 

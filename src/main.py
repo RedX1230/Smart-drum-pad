@@ -1,25 +1,25 @@
 import sys
 import os
 import time
+import math
 import argparse
 
 # Ensure project root is on sys.path for direct script execution
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import cv2
-import requests
 from src.accent_detection import augment_strike
 from src.game_dashboard import GameDashboard
 
 from src.camera_overhead import OverheadCamera
 from src.detect_sticks import load_calibration, detect_stick_tips
 from src.kalman_tracker import StickTrackerManager
-from src.calibrate_pad import run_pad_calibration
+from src.calibrate_pad import run_pad_calibration, load_config
 from src.zone_simulation import run_zone_simulation
 from src.detect_strikes import AudioStrikeDetector
 from src.zone_highlighter import ZoneHighlighter
 from src.metrics_collector import MetricsCollector
-from src.web_dashboard import start_web_server
+from src.web_dashboard import start_web_server, ingest_strike
 
 # Global metrics collector instance
 collector = MetricsCollector()
@@ -67,7 +67,18 @@ def main():
         return
 
     tracker_manager = StickTrackerManager(cx, cy)
-    strike_detector = AudioStrikeDetector(sample_rate=44100, threshold_db=-20.0, cooldown_ms=120)
+
+    # Build the audio detector from config.yaml so the Setup screen's values
+    # are the ones actually in effect. ``threshold`` is a linear 0–1 amplitude.
+    audio_cfg = (load_config() or {}).get('audio', {})
+    sample_rate = int(audio_cfg.get('sample_rate') or 44100)
+    device_index = audio_cfg.get('device_index')
+    thr = audio_cfg.get('threshold')
+    threshold_db = 20.0 * math.log10(max(float(thr), 1e-4)) if thr else -20.0
+    strike_detector = AudioStrikeDetector(
+        sample_rate=sample_rate, threshold_db=threshold_db,
+        cooldown_ms=120, device=device_index,
+    )
     zone_highlighter = ZoneHighlighter(cx, cy, R, rim_width)
 
     # Initialize the game dashboard (scrolling note lane)
@@ -99,13 +110,9 @@ def main():
             for strike in strikes:
                 zone_name = zone_highlighter.get_zone_name(int(strike['x']), int(strike['y']))
                 augment_strike(strike, zone_name)
-                # Forward strike to web UI via Flask endpoint
-                try:
-                    requests.post('http://127.0.0.1:5000/post_strike', json=strike, timeout=0.1)
-                except Exception:
-                    # If the Flask server isn't running, ignore silently
-                    pass
-                collector.add_strike(strike)
+                strike['zone'] = zone_name
+                # Single in-process ingestion: metrics collector + pattern evaluator
+                ingest_strike(strike)
             # Update the scrolling dashboard (adds notes, scores, etc.)
             frame = dashboard.update(frame, ts, strikes)
 

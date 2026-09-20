@@ -22,8 +22,8 @@ class MetricsCollector:
         # Strike data
         self.strikes: List[Dict[str, Any]] = []
         self.strike_counts = {'L': 0, 'R': 0}
-        # Zone hit histogram
-        self.zone_hits = {'inner': 0, 'middle': 0, 'outer': 0}
+        # Zone hit histogram — keys match ZoneHighlighter.get_zone_name
+        self.zone_hits = {'center': 0, 'inner': 0, 'outer': 0, 'rim': 0}
         # BPM calculation (based on recent strike timestamps)
         self.recent_strike_ts: deque[float] = deque(maxlen=8)
         # Latest derived values for quick UI consumption

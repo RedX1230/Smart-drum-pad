@@ -90,11 +90,12 @@ function setView(v) {
   view = v;
   document.body.dataset.view = v;
   $$('#viewnav button').forEach((b) => b.classList.toggle('on', b.dataset.goto === v));
-  $$('.view-analysis, .view-calibrate').forEach((s) => { });
   $('.view-analysis').hidden = v !== 'analysis';
+  $('.view-history').hidden = v !== 'history';
   $('.view-calibrate').hidden = v !== 'calibrate';
   layout();
   if (v === 'analysis') renderAnalysis();
+  if (v === 'history') renderHistory();
 }
 function layout() {
   if (view === 'play') { fit(LANE); fit(DRUM); }
@@ -182,15 +183,21 @@ async function startSession() {
   });
   extendNotes(0);
   const t = $('#transport'); t.textContent = 'Stop practice'; t.classList.add('live');
+  if ($('#metroChk').checked) startMetro();
   updateReadouts();
 }
 function stopSession() {
   session.running = false;
   session.durationMs = performance.now() - session.start;
+  stopMetro();
   const t = $('#transport'); t.textContent = 'Begin practice'; t.classList.remove('live');
-  if (session.events.length) setView('analysis');
+  if (session.events.length) { saveSession(); setView('analysis'); }
 }
 $('#transport').addEventListener('click', () => (session.running ? stopSession() : startSession()));
+$('#metroChk').addEventListener('change', () => {
+  if (!session.running) return;
+  $('#metroChk').checked ? startMetro() : stopMetro();
+});
 
 /* ---- strike ingestion (live detector) --------------------------------- */
 const seen = new Set();
@@ -452,12 +459,119 @@ function drawCalPreview() {
 }
 function renderCalParams() {
   const g = cfg.calibration, a = cfg.audio, c = cfg.camera, z = cfg.zones;
-  const row = (k, v) => `<div class="prow"><span>${k}</span><b>${v}</b></div>`;
+  const pin = (group, key, label, val, step) =>
+    `<div class="prow"><label>${label}</label><input class="pin" data-g="${group}" data-k="${key}" type="number" step="${step}" value="${val ?? ''}" /></div>`;
   $('#calParams').innerHTML = `
-    <div class="pgroup"><h4>Camera</h4>${row('index', c.index ?? '—')}${row('resolution', `${c.width}×${c.height}`)}</div>
-    <div class="pgroup"><h4>Pad boundary</h4>${row('centre', `${g.center_x}, ${g.center_y}`)}${row('radius', g.radius + ' px')}${row('rim width', g.rim_width + ' px')}</div>
-    <div class="pgroup"><h4>Zones (× radius)</h4>${row('inner', z.inner)}${row('middle', z.middle)}${row('outer', z.outer)}</div>
-    <div class="pgroup"><h4>Audio detection</h4>${row('device', a.device_index ?? 'default')}${row('sample rate', (a.sample_rate ?? '—') + ' Hz')}${row('threshold', a.threshold ?? '—')}${row('latency', (a.latency_ms ?? 0) + ' ms')}</div>`;
+    <div class="pgroup"><h4>Camera</h4>${pin('camera', 'index', 'index', c.index, 1)}${pin('camera', 'width', 'width', c.width, 1)}${pin('camera', 'height', 'height', c.height, 1)}</div>
+    <div class="pgroup"><h4>Pad boundary</h4>${pin('calibration', 'center_x', 'centre x', g.center_x, 1)}${pin('calibration', 'center_y', 'centre y', g.center_y, 1)}${pin('calibration', 'radius', 'radius', g.radius, 1)}${pin('calibration', 'rim_width', 'rim width', g.rim_width, 1)}</div>
+    <div class="pgroup"><h4>Zones (× radius)</h4>${pin('zones', 'inner', 'inner', z.inner, 0.05)}${pin('zones', 'middle', 'middle', z.middle, 0.05)}${pin('zones', 'outer', 'outer', z.outer, 0.05)}</div>
+    <div class="pgroup"><h4>Audio detection</h4>${pin('audio', 'threshold', 'threshold', a.threshold, 0.01)}${pin('audio', 'sample_rate', 'sample rate', a.sample_rate, 1)}${pin('audio', 'device_index', 'device index', a.device_index, 1)}</div>
+    <div class="cal-actions"><button id="calSave" class="begin begin-sm">Save settings</button><span class="cal-status" id="calStatus"></span></div>`;
+}
+async function saveCalParams() {
+  const body = {};
+  $$('#calParams .pin').forEach((inp) => {
+    if (inp.value === '') return;
+    (body[inp.dataset.g] = body[inp.dataset.g] || {})[inp.dataset.k] = parseFloat(inp.value);
+  });
+  const status = $('#calStatus');
+  try {
+    const r = await fetch('/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.ok && j.config) {
+      ['camera', 'calibration', 'zones', 'audio'].forEach((k) => Object.assign(cfg[k], j.config[k] || {}));
+      renderCalParams();
+      $('#calStatus').textContent = 'Saved · applies on next detector start';
+    } else { status.textContent = 'Could not save'; }
+  } catch (_) { status.textContent = 'Could not save'; }
+}
+
+/* ---- kpi helper (shared by review + history) ------------------------- */
+function kpi(label, value, sub, warn) {
+  return `<div class="kpi"><span class="eyebrow">${label}</span><div class="kpi-n${warn ? ' warn' : ''}">${value}</div><div class="kpi-sub">${sub || ''}</div></div>`;
+}
+
+/* ---- session summary + persistence ----------------------------------- */
+function computeSummary() {
+  const ev = session.events;
+  const hits = ev.filter((e) => e.kind === 'hit');
+  const c = session.counters, clean = c.perfect + c.good + c.okay, total = clean + c.bad;
+  const deltas = hits.map((e) => e.delta * 1000);
+  const mean = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
+  const spread = deltas.length ? Math.sqrt(deltas.reduce((a, d) => a + (d - mean) ** 2, 0) / deltas.length) : 0;
+  return {
+    pattern: patternName(), bpm, duration_s: +((session.durationMs || 0) / 1000).toFixed(1),
+    strikes: ev.length, accuracy: total ? Math.round((clean / total) * 100) : 0, clean, total,
+    mean_ms: Math.round(mean), spread_ms: Math.round(spread), best_streak: session.maxCombo,
+    left: ev.filter((e) => e.actual === 'L').length, right: ev.filter((e) => e.actual === 'R').length,
+    wrong_hand: hits.filter((e) => !e.correct).length,
+    missed: ev.filter((e) => e.kind === 'miss').length, extra: ev.filter((e) => e.kind === 'extra').length,
+    perfect: c.perfect, good: c.good, okay: c.okay,
+  };
+}
+function saveSession() {
+  if (!session.events.length) return;
+  try {
+    fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(computeSummary()) });
+  } catch (_) {}
+}
+
+/* ---- metronome (Web Audio click at the practice tempo) ---------------- */
+let audioCtx = null, metroTimer = null, metroNext = 0, metroBeat = 0;
+function startMetro() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (_) { return; }
+  metroBeat = 0; metroNext = audioCtx.currentTime + 0.12;
+  clearInterval(metroTimer);
+  metroTimer = setInterval(() => {
+    while (metroNext < audioCtx.currentTime + 0.15) {
+      const accent = pattern.length ? (metroBeat % pattern.length === 0) : (metroBeat % 4 === 0);
+      const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+      osc.frequency.value = accent ? 1600 : 1050;
+      g.gain.setValueAtTime(0.0001, metroNext);
+      g.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.28, metroNext + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, metroNext + 0.05);
+      osc.connect(g).connect(audioCtx.destination);
+      osc.start(metroNext); osc.stop(metroNext + 0.06);
+      metroNext += 60 / bpm; metroBeat++;
+    }
+  }, 25);
+}
+function stopMetro() { clearInterval(metroTimer); metroTimer = null; }
+
+/* ---- render: history -------------------------------------------------- */
+async function renderHistory() {
+  let sessions = [];
+  try { sessions = await (await fetch('/sessions')).json(); } catch (_) {}
+  const has = Array.isArray(sessions) && sessions.length > 0;
+  $('#histEmpty').hidden = has;
+  $('#histBody').hidden = !has;
+  if (!has) { $('#histSummary').textContent = ''; return; }
+
+  const n = sessions.length;
+  const avgAcc = Math.round(sessions.reduce((a, s) => a + (s.accuracy || 0), 0) / n);
+  const totalStrikes = sessions.reduce((a, s) => a + (s.strikes || 0), 0);
+  const best = Math.max(0, ...sessions.map((s) => s.best_streak || 0));
+  $('#histSummary').textContent = `${n} session${n > 1 ? 's' : ''} · ${totalStrikes} strikes logged`;
+  $('#histKey').innerHTML =
+    kpi('Sessions', n, 'logged') +
+    kpi('Average accuracy', avgAcc + '%', 'across all', avgAcc < 60) +
+    kpi('Best streak', best, 'all-time');
+
+  const chron = [...sessions].reverse().slice(-30);
+  $('#histTrend').innerHTML = chron.map((s) => {
+    const a = Math.round(s.accuracy || 0);
+    return `<span class="tbar" title="${s.pattern || ''} · ${a}%"><i style="height:${Math.max(3, a)}%"></i></span>`;
+  }).join('');
+
+  $('#histList').innerHTML = sessions.map((s) => {
+    const d = new Date((s.recorded_at || 0) * 1000);
+    const when = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const tim = s.mean_ms != null ? `${s.mean_ms > 0 ? '+' : ''}${s.mean_ms} ms` : '—';
+    return `<div class="hist-row"><span>${when}</span><span>${s.pattern || '—'}</span><span>${s.bpm || '—'} bpm</span><span>${s.accuracy ?? 0}%</span><span>${tim}</span><span>×${s.best_streak || 0}</span></div>`;
+  }).join('');
 }
 
 /* ---- render: review --------------------------------------------------- */
@@ -496,8 +610,6 @@ async function renderAnalysis() {
   $('#revSummary').textContent = `${bpm} bpm · ${ev.length} strikes · ${mmss(session.durationMs || 0)}`;
 
   // KEY PERFORMANCE band
-  const kpi = (label, value, sub, warn) =>
-    `<div class="kpi"><span class="eyebrow">${label}</span><div class="kpi-n${warn ? ' warn' : ''}">${value}</div><div class="kpi-sub">${sub}</div></div>`;
   $('#revKey').innerHTML =
     kpi('Accuracy', acc + '%', `${clean} of ${total} clean`, acc < 60) +
     kpi('Timing', `${signed}<span style="font-size:22px">ms</span>`, tend, Math.abs(meanR) > 25) +
@@ -611,5 +723,6 @@ drawSeq();
 renderNow();
 loadConfig();
 layout();
+$('#calParams').addEventListener('click', (e) => { if (e.target.closest('#calSave')) saveCalParams(); });
 setInterval(poll, 60);
 requestAnimationFrame(frame);
