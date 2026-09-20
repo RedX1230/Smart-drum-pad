@@ -1,7 +1,7 @@
 import threading
 import time
 from collections import deque
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 
 class MetricsCollector:
     """Thread‑safe collector for stick tracking metrics.
@@ -19,8 +19,8 @@ class MetricsCollector:
         # Speed & acceleration history (same length)
         self.speeds: deque[Tuple[float, float, float]] = deque(maxlen=self.history_len)  # (ts, left_speed, right_speed)
         self.accels: deque[Tuple[float, float, float]] = deque(maxlen=self.history_len)
-        # Strike data
-        self.strikes: List[Dict[str, Any]] = []
+        # Strike data — bounded so a long session can't grow without limit
+        self.strikes: deque[Dict[str, Any]] = deque(maxlen=200)
         self.strike_counts = {'L': 0, 'R': 0}
         # Zone hit histogram — keys match ZoneHighlighter.get_zone_name
         self.zone_hits = {'center': 0, 'inner': 0, 'outer': 0, 'rim': 0}
@@ -72,7 +72,7 @@ class MetricsCollector:
                 'strike_counts': self.strike_counts.copy(),
                 'zone_hits': self.zone_hits.copy(),
                 'bpm': self._compute_bpm(),
-                'recent_strikes': list(self.strikes[-10:])
+                'recent_strikes': list(self.strikes)[-10:]
             })
 
     def add_strike(self, strike: Dict[str, Any]):
@@ -96,7 +96,7 @@ class MetricsCollector:
             self.latest['strike_counts'] = self.strike_counts.copy()
             self.latest['zone_hits'] = self.zone_hits.copy()
             self.latest['bpm'] = self._compute_bpm()
-            self.latest['recent_strikes'] = list(self.strikes[-10:])
+            self.latest['recent_strikes'] = list(self.strikes)[-10:]
 
     def _compute_bpm(self) -> float:
         """Estimate BPM from recent strike timestamps.
