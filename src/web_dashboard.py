@@ -150,8 +150,8 @@ def list_sessions():
 
 _CSV_FIELDS = [
     'recorded_at', 'pattern', 'bpm', 'duration_s', 'strikes', 'accuracy',
-    'mean_ms', 'spread_ms', 'best_streak', 'left', 'right', 'wrong_hand',
-    'missed', 'extra', 'perfect', 'good', 'okay',
+    'zone_acc', 'mean_ms', 'spread_ms', 'best_streak', 'left', 'right',
+    'wrong_hand', 'missed', 'extra', 'perfect', 'good', 'okay',
 ]
 
 

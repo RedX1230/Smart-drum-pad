@@ -47,6 +47,13 @@ function zoneOf(nx, ny) {
   if (r <= z.outer) return 'mid';
   return 'outer';
 }
+// four target bands used by drum notation (mid folds into outer)
+function bandOf(nx, ny) {
+  const z = zoneOf(nx, ny);
+  if (z === 'off') return null;
+  if (z === 'mid') return 'outer';
+  return z; // centre / inner / outer / rim
+}
 
 /* ---- canvas helpers --------------------------------------------------- */
 function reg(sel) { const cv = $(sel); return { cv, ctx: cv.getContext('2d'), w: 0, h: 0 }; }
@@ -105,10 +112,19 @@ function layout() {
 window.addEventListener('resize', layout);
 $('#viewnav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.goto); });
 
-/* ---- pattern builder + tempo ----------------------------------------- */
-let pattern = ['L', 'R', 'L', 'R'];
+/* ---- pattern builder + drum notation + tempo ------------------------- */
+// A note is { hand: 'L'|'R', zone: 'centre'|'inner'|'outer'|'rim' }.
+let pattern = ['L', 'R', 'L', 'R'].map((h) => ({ hand: h, zone: 'centre' }));
 let bpm = 90;
+const ZONES = ['centre', 'inner', 'outer', 'rim'];
+const ZONE_FROM = { c: 'centre', i: 'inner', o: 'outer', r: 'rim' };
+const ZONE_LET = { centre: '', inner: 'i', outer: 'o', rim: 'r' };
+const ZONE_R = { centre: 0, inner: 0.35, outer: 0.72, rim: 1.0 };
 const PRESETS = { LR: 'Single stroke', LLRR: 'Double stroke', LRRL: 'Paradiddle', LLRLLR: 'Triplet feel' };
+
+const hands = () => pattern.map((n) => n.hand);
+const handStr = () => hands().join('');
+
 function minUnit(arr) {
   const n = arr.length;
   for (let len = 1; len <= n; len++) {
@@ -119,17 +135,43 @@ function minUnit(arr) {
 }
 function patternName() {
   if (!pattern.length) return 'No phrase set';
-  return PRESETS[minUnit(pattern)] || 'Custom phrase';
+  const named = PRESETS[minUnit(hands())];
+  const zoned = pattern.some((n) => n.zone !== 'centre');
+  if (named) return zoned ? `${named} (zoned)` : named;
+  return zoned ? 'Zoned phrase' : 'Custom phrase';
 }
+
+/* Drum notation: whitespace/comma-separated tokens, each a hand and an
+   optional zone letter — e.g. "L R Li Ro Rr" is
+   L centre, R centre, L inner, R outer, R rim. */
+function parseNotation(text) {
+  const toks = (text || '').trim().split(/[\s,]+/).filter(Boolean);
+  const notes = [];
+  for (const tok of toks) {
+    const m = /^([lr])([cior])?$/i.exec(tok);
+    if (!m) return { error: `Couldn't read "${tok}"` };
+    notes.push({ hand: m[1].toUpperCase(), zone: m[2] ? ZONE_FROM[m[2].toLowerCase()] : 'centre' });
+  }
+  if (!notes.length) return { error: 'Nothing to read' };
+  return { notes };
+}
+function patternToNotation(pat) {
+  return pat.map((n) => n.hand + ZONE_LET[n.zone]).join(' ');
+}
+function gemHTML(n) {
+  const z = ZONE_LET[n.zone];
+  return `<span class="gem ${n.hand}"${z ? ` data-z="${z}"` : ''}>${n.hand}${z ? `<i>${z}</i>` : ''}</span>`;
+}
+
 function drawSeq() {
-  $('#seqStrip').innerHTML = pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('');
+  $('#seqStrip').innerHTML = pattern.map(gemHTML).join('');
+  const box = $('#notation');
+  if (box && document.activeElement !== box) box.value = patternToNotation(pattern);
   renderNow();
   savePrefs();
 }
 function renderNow() {
-  $('#nowSeq').innerHTML = pattern.length
-    ? pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('')
-    : '<span class="now-meta">—</span>';
+  $('#nowSeq').innerHTML = pattern.length ? pattern.map(gemHTML).join('') : '<span class="now-meta">—</span>';
   $('#nowMeta').textContent = `${patternName()} · ${bpm} bpm`;
 }
 
@@ -137,7 +179,9 @@ function renderNow() {
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('sdp_prefs') || '{}');
-    if (Array.isArray(p.pattern) && p.pattern.length && p.pattern.every((x) => x === 'L' || x === 'R')) pattern = p.pattern;
+    if (Array.isArray(p.pattern) && p.pattern.length && p.pattern.every((n) => n && (n.hand === 'L' || n.hand === 'R'))) {
+      pattern = p.pattern.map((n) => ({ hand: n.hand, zone: ZONES.includes(n.zone) ? n.zone : 'centre' }));
+    }
     if (typeof p.bpm === 'number') bpm = Math.max(30, Math.min(240, p.bpm));
     if (typeof p.loop === 'boolean') $('#loopChk').checked = p.loop;
     if (typeof p.metro === 'boolean') $('#metroChk').checked = p.metro;
@@ -152,14 +196,22 @@ function savePrefs() {
 }
 $('.handpad').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.append) pattern.push(b.dataset.append);
+  if (b.dataset.append) pattern.push({ hand: b.dataset.append, zone: 'centre' });
   else if (b.dataset.seq === 'back') pattern.pop();
   else if (b.dataset.seq === 'clear') pattern = [];
   drawSeq();
 });
 $('.presets').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  pattern = b.dataset.preset.split(''); drawSeq();
+  pattern = b.dataset.preset.split('').map((h) => ({ hand: h, zone: 'centre' }));
+  drawSeq();
+});
+$('#applyNotation').addEventListener('click', () => {
+  const { notes, error } = parseNotation($('#notation').value);
+  if (error) { $('#notationErr').textContent = error; return; }
+  $('#notationErr').textContent = '';
+  pattern = notes;
+  drawSeq();
 });
 $('.tempo').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -187,7 +239,7 @@ function extendNotes(t) {
   while (session.cyclesDone < cap && (session.notes.length === 0 || session.notes[session.notes.length - 1].time < need)) {
     if (pattern.length === 0) break;
     for (let i = 0; i < pattern.length; i++) {
-      session.notes.push({ idx: session.nextIdx++, time: session.nextTime + i * session.beat, hand: pattern[i], judged: false, missed: false, result: null });
+      session.notes.push({ idx: session.nextIdx++, time: session.nextTime + i * session.beat, hand: pattern[i].hand, zone: pattern[i].zone, judged: false, missed: false, result: null });
     }
     session.nextTime += pattern.length * session.beat;
     session.cyclesDone++;
@@ -195,7 +247,7 @@ function extendNotes(t) {
 }
 async function startSession() {
   if (pattern.length === 0) { flash('stray', 'add a pattern first'); return; }
-  try { await fetch('/set_pattern', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern: pattern.join('') }) }); } catch (_) {}
+  try { await fetch('/set_pattern', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pattern: handStr() }) }); } catch (_) {}
   Object.assign(session, {
     running: true, start: performance.now(), beat: 60 / bpm, loop: $('#loopChk').checked,
     notes: [], nextIdx: 0, nextTime: LEADIN, cyclesDone: 0,
@@ -248,26 +300,6 @@ function handleStrike(s) {
   if (session.running) judge({ hand, nx, ny, zone, type });
 }
 
-/* keyboard practice — play without the camera/mic rig (F = left, J = right) */
-function localStrike(hand) {
-  const nx = (Math.random() - 0.5) * 0.5, ny = (Math.random() - 0.5) * 0.5;
-  const zone = zoneOf(nx, ny);
-  session.ripples.push({ nx, ny, hand, born: performance.now() });
-  showHud(hand, 'tap', zone);
-  if (session.running) judge({ hand, nx, ny, zone, type: 'normal' });
-}
-window.addEventListener('keydown', (e) => {
-  if (e.repeat || view !== 'play') return;
-  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-  let hand = null;
-  const k = e.key.toLowerCase();
-  if (k === 'f' || e.key === 'ArrowLeft') hand = 'L';
-  else if (k === 'j' || e.key === 'ArrowRight') hand = 'R';
-  else if (k === ' ') { e.preventDefault(); (session.running ? stopSession : startSession)(); return; }
-  if (!hand) return;
-  e.preventDefault();
-  localStrike(hand);
-});
 function judge(st) {
   const t = (performance.now() - session.start) / 1000;
   const w = windows();
@@ -281,8 +313,10 @@ function judge(st) {
     const delta = t - best.time;
     const correct = st.hand === best.hand;
     const cls = bd <= w.p ? 'perfect' : bd <= w.g ? 'good' : 'okay';
-    best.judged = true; best.result = { cls, delta, correct, st };
-    session.events.push({ kind: 'hit', idx: best.idx, target: best.hand, actual: st.hand, delta, correct, cls, nx: st.nx, ny: st.ny, zone: st.zone, type: st.type });
+    const band = bandOf(st.nx, st.ny);
+    const zoneOk = band === best.zone;
+    best.judged = true; best.result = { cls, delta, correct, zoneOk, st };
+    session.events.push({ kind: 'hit', idx: best.idx, target: best.hand, actual: st.hand, delta, correct, cls, nx: st.nx, ny: st.ny, zone: st.zone, type: st.type, targetZone: best.zone, actualBand: band, zoneOk });
     if (correct) { session.score += POINTS[cls]; session.counters[cls]++; session.combo++; session.maxCombo = Math.max(session.maxCombo, session.combo); flash(cls, cls); }
     else { session.counters.bad++; session.combo = 0; flash('bad', 'other hand'); }
   } else {
@@ -387,6 +421,12 @@ function drawLane() {
       // faint inner mark for the brass (right) so tone difference is unmistakable up close
       if (n.hand === 'R') { ctx.fillStyle = 'rgba(233,223,202,0.5)'; ctx.beginPath(); ctx.arc(x, y, r * 0.32, 0, Math.PI * 2); ctx.fill(); }
     }
+    if (n.zone && n.zone !== 'centre') {
+      ctx.fillStyle = 'rgba(44,26,10,0.75)';
+      ctx.font = '600 11px Georgia, "Times New Roman", serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(ZONE_LET[n.zone], x, y + r + 9);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -463,6 +503,25 @@ function drawDrum(target, big) {
   // small maker's mark at centre
   ctx.strokeStyle = 'rgba(70,52,28,0.3)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(cx, cy, R * 0.05, 0, Math.PI * 2); ctx.stroke();
+
+  // upcoming target zone (from the notation) glows as the note approaches
+  if (big && session.running) {
+    const tt = (performance.now() - session.start) / 1000;
+    let up = null;
+    for (const n of session.notes) {
+      if (n.judged || n.missed || n.time < tt - 0.05) continue;
+      if (!up || n.time < up.time) up = n;
+    }
+    if (up && up.time - tt < 1.6) {
+      const prox = 1 - Math.min(1, (up.time - tt) / 1.6);
+      ctx.save();
+      ctx.globalAlpha = 0.3 + prox * 0.55;
+      ctx.strokeStyle = handColor(up.hand); ctx.lineWidth = 2 + prox * 2.5;
+      const rr2 = up.zone === 'centre' ? R * 0.13 : up.zone === 'rim' ? (R + rimR) / 2 : ZONE_R[up.zone] * R;
+      ctx.beginPath(); ctx.arc(cx, cy, rr2, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   // strike marks — soft ink (left) / brass (right) blotches that settle and fade
   session.ripples = session.ripples.filter((rp) => now - rp.born < 1400);
@@ -556,9 +615,11 @@ function computeSummary() {
   const deltas = hits.map((e) => e.delta * 1000);
   const mean = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : 0;
   const spread = deltas.length ? Math.sqrt(deltas.reduce((a, d) => a + (d - mean) ** 2, 0) / deltas.length) : 0;
+  const zoneOk = hits.filter((e) => e.zoneOk).length;
   return {
     pattern: patternName(), bpm, duration_s: +((session.durationMs || 0) / 1000).toFixed(1),
     strikes: ev.length, accuracy: total ? Math.round((clean / total) * 100) : 0, clean, total,
+    zone_acc: hits.length ? Math.round((zoneOk / hits.length) * 100) : 0,
     mean_ms: Math.round(mean), spread_ms: Math.round(spread), best_streak: session.maxCombo,
     left: ev.filter((e) => e.actual === 'L').length, right: ev.filter((e) => e.actual === 'R').length,
     wrong_hand: hits.filter((e) => !e.correct).length,
@@ -657,6 +718,9 @@ async function renderAnalysis() {
   const missCount = ev.filter((e) => e.kind === 'miss').length;
   const extraCount = ev.filter((e) => e.kind === 'extra').length;
   const Lc = ev.filter((e) => e.actual === 'L').length, Rc = ev.filter((e) => e.actual === 'R').length;
+  const zoneOkN = hits.filter((e) => e.zoneOk).length;
+  const zoneAcc = hits.length ? Math.round((zoneOkN / hits.length) * 100) : 0;
+  const zoned = notes.some((n) => n.zone && n.zone !== 'centre');
 
   // timing statistics (ms)
   const deltas = hits.map((e) => e.delta * 1000);
@@ -683,8 +747,8 @@ async function renderAnalysis() {
     ? `On average you played ${tend}${meanR ? `, about ${Math.abs(meanR)} ms ${meanR > 0 ? 'behind' : 'ahead of'} the beat` : ''}, with a spread of ±${spread} ms.`
     : 'No in-window strikes to measure.';
 
-  // PATTERN — target vs actual
-  const trow = notes.map((n) => `<span class="gem ${n.hand}">${n.hand}</span>`).join('');
+  // PATTERN — target vs actual (target gems carry their zone)
+  const trow = notes.map(gemHTML).join('');
   const arow = notes.map((n) => {
     if (n.missed) return `<span class="gem miss">·</span>`;
     const st = n.result.st;
@@ -719,6 +783,7 @@ async function renderAnalysis() {
     rowT('Perfect', c.perfect) + rowT('Good', c.good) + rowT('Okay', c.okay) +
     rowT('Missed notes', missCount) + rowT('Wrong hand', wrong) + rowT('Off-pattern strikes', extraCount) +
     rowT('Left / right strikes', `${Lc} / ${Rc}`) +
+    (zoned ? rowT('Zone accuracy', `${zoneAcc}%`) : '') +
     rowT('Mean timing', `${signed} ms`) + rowT('Timing spread', `±${spread} ms`) +
     rowT('Sequence match', `${Math.round(sc * 100)}%`);
 

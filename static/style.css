@@ -102,8 +102,28 @@ body[data-view="play"] .stage { display: grid; grid-template-columns: 264px 1fr;
 .seq { display: flex; flex-wrap: wrap; gap: 4px; min-height: 26px; margin-bottom: 10px; }
 .seq .gem { width: 22px; height: 24px; border-radius: 3px; display: grid; place-items: center; font-family: var(--sans); font-weight: 600; font-size: 12px; }
 .seq:empty::after { content: "empty"; color: var(--ink-3); font-style: italic; font-family: var(--serif); font-size: 12px; }
+.gem { position: relative; }
 .gem.L { background: linear-gradient(180deg, #55412d, #3f2e1f); color: #efe3c8; }
 .gem.R { background: linear-gradient(180deg, #b8944a, #9a7634); color: #2a1e08; }
+.gem i {
+  position: absolute; top: -4px; right: -4px; font-style: normal; font-weight: 700;
+  font-size: 8px; line-height: 1; padding: 1px 2px; border-radius: 2px;
+  background: var(--ink); color: var(--sheet); font-family: var(--sans);
+}
+
+/* drum notation */
+.notation {
+  width: 100%; resize: vertical; min-height: 40px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink);
+  background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 7px 9px; margin-bottom: 8px;
+}
+.notation:focus { outline: none; border-color: var(--brass); }
+.notation-row { display: flex; align-items: center; gap: 10px; }
+.apply-btn { flex: 0 0 auto; padding: 8px 14px; }
+.notation-err { font-size: 12px; color: var(--burgundy); font-style: italic; font-family: var(--serif); }
+.legend { font-size: 11.5px; color: var(--ink-3); line-height: 1.5; margin: 10px 0 0; }
+.legend b { color: var(--ink-2); font-family: ui-monospace, monospace; }
+.legend em { font-style: italic; color: var(--ink-2); }
 
 .handpad { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 .stk, .stk-min, .tempo button {
@@ -304,14 +324,6 @@ body[data-view="play"] .stage { display: grid; grid-template-columns: 264px 1fr;
   .rev-two { grid-template-columns: 1fr; gap: var(--sp-4); }
   .review-inner { padding: var(--sp-3) var(--sp-3) 48px; }
   .cal-grid { grid-template-columns: 1fr; }
-}
-
-/* keyboard hint on the desk */
-.desk-hint { font-size: 12.5px; color: var(--ink-3); line-height: 1.5; margin: 4px 0 0; font-family: var(--serif); font-style: italic; }
-kbd {
-  font-family: var(--sans); font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink);
-  background: linear-gradient(180deg, #f1e7cf, #e0d1af); border: 1px solid rgba(75,56,38,0.3);
-  border-radius: 3px; padding: 1px 6px; box-shadow: inset 0 1px 0 rgba(255,250,236,0.6), 0 1px 1px rgba(44,30,14,0.18);
 }
 
 /* history actions */

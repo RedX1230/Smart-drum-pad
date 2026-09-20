@@ -39,20 +39,21 @@ python -m src.main
 
 Then open http://127.0.0.1:5000 for the web UI.
 
-No pad connected? Run the web UI on its own and practise with the keyboard:
+Run the web UI on its own (no camera or desktop window) to build patterns,
+review past sessions and calibrate:
 
 ```bash
 python -m src.main --web-only
 ```
 
-In Practice, tap **F** (left) and **J** (right) in time with the falling notes;
-**Space** starts or stops a session.
-
 ## The screens
 
-- **Practice** — build a sticking pattern (or pick a preset: single stroke,
-  double stroke, paradiddle, triplet), set the tempo, optionally turn on the
-  metronome, and play. A 3-count leads in, then notes descend onto the drum;
+- **Practice** — build a sticking pattern with the L/R buttons and presets,
+  or type **drum notation** to set both the hand and the target zone per
+  note. A note is a hand (`L`/`R`) plus an optional zone letter — `c` centre,
+  `i` inner, `o` outer, `r` rim (default centre); for example `L R Li Ro Rr`.
+  Set the tempo, optionally turn on the metronome, and play: a 3-count leads
+  in, notes descend onto the drum, the target zone glows on the pad, and
   accuracy, streak, score and struck tempo update live.
 - **Review** — the last session: key results, a timing plot (ahead/behind the
   beat), target-vs-played pattern, a drum map of where you struck, hit-type

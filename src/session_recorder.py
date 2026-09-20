@@ -19,7 +19,7 @@ from typing import Any, Dict, List
 # the file. Everything is coerced to a plain JSON-safe scalar.
 _ALLOWED = {
     "pattern": str, "bpm": float, "duration_s": float, "strikes": int,
-    "accuracy": float, "clean": int, "total": int,
+    "accuracy": float, "zone_acc": float, "clean": int, "total": int,
     "mean_ms": float, "spread_ms": float, "best_streak": int,
     "left": int, "right": int, "wrong_hand": int, "missed": int, "extra": int,
     "perfect": int, "good": int, "okay": int,

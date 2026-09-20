@@ -46,6 +46,16 @@
       </div>
 
       <div class="desk-group">
+        <div class="field-label">Drum notation</div>
+        <textarea id="notation" class="notation" rows="2" spellcheck="false" placeholder="L R Li Ro Rr"></textarea>
+        <div class="notation-row">
+          <button id="applyNotation" class="stk apply-btn" type="button">Apply notation</button>
+          <span class="notation-err" id="notationErr"></span>
+        </div>
+        <p class="legend">Hand <b>L</b>/<b>R</b>, then a zone — <b>c</b> centre · <b>i</b> inner · <b>o</b> outer · <b>r</b> rim (default centre). e.g. <em>Li Ro</em> = left inner, right outer.</p>
+      </div>
+
+      <div class="desk-group">
         <div class="field-label">Tempo</div>
         <div class="tempo">
           <button data-bpm="-5" aria-label="slower">–</button>
@@ -57,7 +67,6 @@
       </div>
 
       <button class="begin" id="transport">Begin practice</button>
-      <p class="desk-hint">No pad connected? Play by tapping <kbd>F</kbd> (left) and <kbd>J</kbd> (right). <kbd>Space</kbd> starts or stops.</p>
     </aside>
 
     <section class="play-main">

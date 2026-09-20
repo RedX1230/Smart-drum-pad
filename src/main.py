@@ -47,7 +47,7 @@ def main():
 
     if args.web_only:
         print("Web UI running at http://127.0.0.1:5000  (Ctrl+C to stop)")
-        print("No detector — open the page and practise with the keyboard (F / J).")
+        print("No detector — use the page to build patterns, review history and calibrate.")
         try:
             while True:
                 time.sleep(1)
