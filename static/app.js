@@ -17,7 +17,7 @@ const handColor = (h) => (h === 'L' ? LEFT : RIGHT);
 const INK = '#2c2419', INK_SOFT = 'rgba(44,36,25,0.55)', RULE = 'rgba(44,36,25,0.14)';
 const POINTS = { perfect: 100, good: 70, okay: 40, bad: 0 };
 const VERDICT_COL = { perfect: '#7d5f28', good: '#5b5040', okay: '#8a7c64', bad: '#7c3a34', stray: '#7c3a34' };
-const LEADIN = 2.2;
+const LEADIN = 3.0;
 
 /* ---- config / geometry ------------------------------------------------ */
 const cfg = {
@@ -124,12 +124,31 @@ function patternName() {
 function drawSeq() {
   $('#seqStrip').innerHTML = pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('');
   renderNow();
+  savePrefs();
 }
 function renderNow() {
   $('#nowSeq').innerHTML = pattern.length
     ? pattern.map((h) => `<span class="gem ${h}">${h}</span>`).join('')
     : '<span class="now-meta">—</span>';
   $('#nowMeta').textContent = `${patternName()} · ${bpm} bpm`;
+}
+
+/* remember the player's setup between visits */
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('sdp_prefs') || '{}');
+    if (Array.isArray(p.pattern) && p.pattern.length && p.pattern.every((x) => x === 'L' || x === 'R')) pattern = p.pattern;
+    if (typeof p.bpm === 'number') bpm = Math.max(30, Math.min(240, p.bpm));
+    if (typeof p.loop === 'boolean') $('#loopChk').checked = p.loop;
+    if (typeof p.metro === 'boolean') $('#metroChk').checked = p.metro;
+  } catch (_) {}
+}
+function savePrefs() {
+  try {
+    localStorage.setItem('sdp_prefs', JSON.stringify({
+      pattern, bpm, loop: $('#loopChk').checked, metro: $('#metroChk').checked,
+    }));
+  } catch (_) {}
 }
 $('.handpad').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
@@ -145,8 +164,9 @@ $('.presets').addEventListener('click', (e) => {
 $('.tempo').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   bpm = Math.max(30, Math.min(240, bpm + parseInt(b.dataset.bpm, 10)));
-  $('#bpmVal').textContent = bpm; renderNow();
+  $('#bpmVal').textContent = bpm; renderNow(); savePrefs();
 });
+$('#loopChk').addEventListener('change', savePrefs);
 
 /* ---- session model ---------------------------------------------------- */
 const session = {
@@ -195,6 +215,7 @@ function stopSession() {
 }
 $('#transport').addEventListener('click', () => (session.running ? stopSession() : startSession()));
 $('#metroChk').addEventListener('change', () => {
+  savePrefs();
   if (!session.running) return;
   $('#metroChk').checked ? startMetro() : stopMetro();
 });
@@ -226,6 +247,27 @@ function handleStrike(s) {
   showHud(hand, type, zone);
   if (session.running) judge({ hand, nx, ny, zone, type });
 }
+
+/* keyboard practice — play without the camera/mic rig (F = left, J = right) */
+function localStrike(hand) {
+  const nx = (Math.random() - 0.5) * 0.5, ny = (Math.random() - 0.5) * 0.5;
+  const zone = zoneOf(nx, ny);
+  session.ripples.push({ nx, ny, hand, born: performance.now() });
+  showHud(hand, 'tap', zone);
+  if (session.running) judge({ hand, nx, ny, zone, type: 'normal' });
+}
+window.addEventListener('keydown', (e) => {
+  if (e.repeat || view !== 'play') return;
+  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+  let hand = null;
+  const k = e.key.toLowerCase();
+  if (k === 'f' || e.key === 'ArrowLeft') hand = 'L';
+  else if (k === 'j' || e.key === 'ArrowRight') hand = 'R';
+  else if (k === ' ') { e.preventDefault(); (session.running ? stopSession : startSession)(); return; }
+  if (!hand) return;
+  e.preventDefault();
+  localStrike(hand);
+});
 function judge(st) {
   const t = (performance.now() - session.start) / 1000;
   const w = windows();
@@ -346,6 +388,21 @@ function drawLane() {
       if (n.hand === 'R') { ctx.fillStyle = 'rgba(233,223,202,0.5)'; ctx.beginPath(); ctx.arc(x, y, r * 0.32, 0, Math.PI * 2); ctx.fill(); }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // count-in over the lead-in bars, before the first note lands
+  if (session.running) {
+    const remain = LEADIN - t;
+    if (remain > 0) {
+      const n = Math.ceil(remain);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.12, remain - (n - 1));
+      ctx.fillStyle = 'rgba(44,26,10,0.55)';
+      ctx.font = '600 88px Georgia, "Times New Roman", serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(n), w / 2, h * 0.4);
+      ctx.restore();
+    }
   }
 }
 
@@ -548,7 +605,12 @@ async function renderHistory() {
   const has = Array.isArray(sessions) && sessions.length > 0;
   $('#histEmpty').hidden = has;
   $('#histBody').hidden = !has;
-  if (!has) { $('#histSummary').textContent = ''; return; }
+  $('#histActions').hidden = !has;
+  if (!has) {
+    $('#histSummary').textContent = '';
+    $('#histKey').innerHTML = ''; $('#histTrend').innerHTML = ''; $('#histList').innerHTML = '';
+    return;
+  }
 
   const n = sessions.length;
   const avgAcc = Math.round(sessions.reduce((a, s) => a + (s.accuracy || 0), 0) / n);
@@ -718,11 +780,17 @@ function frame() {
 }
 
 /* ---- boot ------------------------------------------------------------- */
+loadPrefs();
 $('#bpmVal').textContent = bpm;
 drawSeq();
 renderNow();
 loadConfig();
 layout();
 $('#calParams').addEventListener('click', (e) => { if (e.target.closest('#calSave')) saveCalParams(); });
+$('#histClear').addEventListener('click', async () => {
+  if (!window.confirm('Clear all saved sessions?')) return;
+  try { await fetch('/sessions', { method: 'DELETE' }); } catch (_) {}
+  renderHistory();
+});
 setInterval(poll, 60);
 requestAnimationFrame(frame);

@@ -57,6 +57,7 @@
       </div>
 
       <button class="begin" id="transport">Begin practice</button>
+      <p class="desk-hint">No pad connected? Play by tapping <kbd>F</kbd> (left) and <kbd>J</kbd> (right). <kbd>Space</kbd> starts or stops.</p>
     </aside>
 
     <section class="play-main">
@@ -170,6 +171,11 @@
         </div>
         <p class="rev-summary" id="histSummary"></p>
       </header>
+
+      <div class="hist-actions" id="histActions" hidden>
+        <a class="ghost-btn" id="histExport" href="/sessions.csv">Export CSV</a>
+        <button class="ghost-btn" id="histClear" type="button">Clear history</button>
+      </div>
 
       <p id="histEmpty" class="rev-empty">Finished sessions are saved here. Play a phrase and end it to start building a record of how your accuracy, timing and streaks change.</p>
 

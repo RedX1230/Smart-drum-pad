@@ -74,3 +74,11 @@ class SessionRecorder:
         """Every stored session, newest first."""
         with self._lock:
             return list(reversed(self._load()))
+
+    def clear(self) -> None:
+        """Remove all stored sessions."""
+        with self._lock:
+            try:
+                self.path.unlink()
+            except FileNotFoundError:
+                pass

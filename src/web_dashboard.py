@@ -139,10 +139,41 @@ def save_session():
     return jsonify({"ok": True})
 
 
-@app.route('/sessions')
+@app.route('/sessions', methods=['GET', 'DELETE'])
 def list_sessions():
-    """Return stored practice sessions, newest first."""
+    """GET: stored practice sessions, newest first. DELETE: clear them all."""
+    if request.method == 'DELETE':
+        recorder.clear()
+        return jsonify({"ok": True})
     return jsonify(recorder.all())
+
+
+_CSV_FIELDS = [
+    'recorded_at', 'pattern', 'bpm', 'duration_s', 'strikes', 'accuracy',
+    'mean_ms', 'spread_ms', 'best_streak', 'left', 'right', 'wrong_hand',
+    'missed', 'extra', 'perfect', 'good', 'okay',
+]
+
+
+@app.route('/sessions.csv')
+def sessions_csv():
+    """Download the session log as CSV, oldest first."""
+    import csv
+    import io
+    from datetime import datetime, timezone
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_CSV_FIELDS, extrasaction='ignore')
+    writer.writeheader()
+    for s in reversed(recorder.all()):  # chronological
+        row = dict(s)
+        if 'recorded_at' in row:
+            row['recorded_at'] = datetime.fromtimestamp(row['recorded_at'], timezone.utc).isoformat()
+        writer.writerow(row)
+    return app.response_class(
+        buf.getvalue(), mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=smart-drum-pad-sessions.csv'},
+    )
 
 
 # ---------------------------------------------------------------------

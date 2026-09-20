@@ -102,3 +102,22 @@ def test_config_post_empty_body(env):
     client, _ = env
     assert client.post("/config", json={}).get_json()["ok"] is True
 
+
+def test_sessions_delete(env):
+    client, _ = env
+    client.post("/session", json={"pattern": "a"})
+    assert len(client.get("/sessions").get_json()) == 1
+    assert client.delete("/sessions").get_json()["ok"] is True
+    assert client.get("/sessions").get_json() == []
+
+
+def test_sessions_csv(env):
+    client, _ = env
+    client.post("/session", json={"pattern": "Paradiddle", "bpm": 100, "accuracy": 91})
+    r = client.get("/sessions.csv")
+    assert r.status_code == 200
+    assert r.mimetype == "text/csv"
+    text = r.get_data(as_text=True)
+    assert "pattern" in text.splitlines()[0]
+    assert "Paradiddle" in text
+

@@ -39,9 +39,21 @@ def main():
     parser.add_argument("--no-calib", action="store_true", help="Skip interactive pad calibration")
     parser.add_argument("--debug", action="store_true", help="Show color mask debug windows")
     parser.add_argument("--cam", type=int, default=None, help="Camera index override")
+    parser.add_argument("--web-only", action="store_true",
+                        help="Run only the web UI (no camera/desktop window); practise with the keyboard")
     args = parser.parse_args()
 
     print("Smart Drum Pad — Main")
+
+    if args.web_only:
+        print("Web UI running at http://127.0.0.1:5000  (Ctrl+C to stop)")
+        print("No detector — open the page and practise with the keyboard (F / J).")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return
 
     # Optionally run interactive pad calibration
     if not args.no_calib:
